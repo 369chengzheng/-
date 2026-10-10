@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>IMDP.Products.GasDG.LaserDetector</RootNamespace>
+    <AssemblyName>IMDP.Products.GasDG.LaserDetector</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Prism.DryIoc" Version="9.0.537" />
+    <PackageReference Include="Prism.Wpf" Version="9.0.537" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="MaterialDesignThemes" Version="5.2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\IMDP.Domain\IMDP.Domain.csproj" />
+    <ProjectReference Include="..\..\..\IMDP.Application\IMDP.Application.csproj" />
+    <ProjectReference Include="..\..\..\IMDP.Infrastructure\IMDP.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

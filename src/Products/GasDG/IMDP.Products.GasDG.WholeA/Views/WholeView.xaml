@@ -1,0 +1,221 @@
+<UserControl x:Class="IMDP.Products.GasDG.WholeA.Views.WholeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:prism="http://prismlibrary.com/"
+             xmlns:vm="clr-namespace:IMDP.Products.GasDG.WholeA.ViewModels"
+             prism:ViewModelLocator.AutoWireViewModel="True"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="1200"
+             Background="{DynamicResource MaterialDesignPaper}">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
+    <DockPanel Margin="16">
+        <!-- 面包屑 + 工具栏 -->
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="首页" Style="{StaticResource BreadcrumbButtonStyle}"
+                        Command="{Binding GoHomeCommand}"/>
+                <materialDesign:PackIcon Kind="ChevronRight" Width="16" Height="16"
+                                         Foreground="{DynamicResource MaterialDesignBody}" Opacity="0.5">
+                    <materialDesign:PackIcon.Style>
+                        <Style TargetType="materialDesign:PackIcon">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CurrentMaterialNumber}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </materialDesign:PackIcon.Style>
+                </materialDesign:PackIcon>
+                <TextBlock Text="{Binding CurrentMaterialNumber}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource BreadcrumbCurrentStyle}">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CurrentMaterialNumber}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <materialDesign:PackIcon Kind="ChevronRight" Width="16" Height="16" 
+                                         Foreground="{DynamicResource MaterialDesignBody}" Opacity="0.5"/>
+                <TextBlock Text="{Binding CurrentPageName}" Style="{StaticResource BreadcrumbCurrentStyle}"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                <TextBlock Text="产品编码:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBox Text="{Binding ProductCode, UpdateSourceTrigger=PropertyChanged}" 
+                         Width="150" Margin="0,0,8,0"/>
+                <TextBlock Text="客户编码:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBox Text="{Binding CustomerCode, UpdateSourceTrigger=PropertyChanged}" 
+                         Width="120" Margin="0,0,8,0"/>
+                <Button Content="查询" Command="{Binding QueryCommand}" Width="60" Height="28" Margin="0,0,8,0"/>
+                <Button Content="打开串口" Command="{Binding OpenPortCommand}" Width="80" Height="28" Margin="0,0,8,0"/>
+                <Button Content="关闭串口" Command="{Binding ClosePortCommand}" Width="80" Height="28" Margin="0,0,8,0"/>
+                <Button Content="显示/隐藏方案" Command="{Binding ToggleSchemeCommand}" Width="110" Height="28" Margin="0,0,8,0"/>
+                <Button Command="{Binding OpenSettingsCommand}" Width="32" Height="32" Padding="0"
+                        Background="Transparent" BorderThickness="0">
+                    <materialDesign:PackIcon Kind="Settings" Width="24" Height="24"/>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- 检测方案显示区 -->
+        <materialDesign:Card DockPanel.Dock="Top" Padding="16" Margin="0,0,0,16"
+                             Visibility="{Binding IsSchemeVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel>
+                <TextBlock Text="检测方案区" FontWeight="Bold" Margin="0,0,0,12"/>
+
+                <!-- 其他参数项 WrapPanel 布局（与配置页格式一致） -->
+                <ItemsControl ItemsSource="{Binding OtherSchemeParameters}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:SchemeParameter}">
+                            <StackPanel>
+                                <!-- 合并父参数卡片（只读展示，仅 IsMergedParent=true 且 IsVisible=true 时显示） -->
+                                <Border BorderBrush="{DynamicResource MaterialDesignPrimary}"
+                                        BorderThickness="1.5" Padding="10,8" Margin="4,4"
+                                        CornerRadius="4"
+                                        Background="{DynamicResource MaterialDesignCardBackground}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsMergedParent}" Value="True"/>
+                                                        <Condition Binding="{Binding IsVisible}" Value="True"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                            <CheckBox IsChecked="{Binding IsEnabled, Mode=OneWay}" IsEnabled="False" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                       Width="100" Margin="8,0,8,0" FontWeight="Bold"/>
+                                            <TextBlock Text="MES代码:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBlock Text="{Binding MesCode}" VerticalAlignment="Center"
+                                                       Width="110" Margin="0,0,8,0" Opacity="0.7"/>
+                                        <!-- 子参数当前值行（内联展示） -->
+                                        <ItemsControl ItemsSource="{Binding SubParameters}" Margin="8,0,0,0">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:SchemeParameter}">
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
+                                                        <StackPanel.Style>
+                                                            <Style TargetType="StackPanel">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsVisible}" Value="False">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </StackPanel.Style>
+                                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                                   Margin="0,0,4,0"/>
+                                                        <TextBlock Text=":" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                        <TextBlock Text="{Binding Value}" VerticalAlignment="Center"
+                                                                   Width="120" FontWeight="Medium"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 常规参数卡片（只读展示，IsMergedParent=false 且 IsVisible=true 时显示） -->
+                                <Border BorderBrush="{DynamicResource MaterialDesignDivider}"
+                                        BorderThickness="1" Padding="8" Margin="4,2">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsMergedParent}" Value="False"/>
+                                                        <Condition Binding="{Binding IsVisible}" Value="True"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox IsChecked="{Binding IsEnabled, Mode=OneWay}" IsEnabled="False" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                   Width="100" Margin="8,0,8,0"/>
+
+                                        <TextBlock Text="MES代码:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="{Binding MesCode}" VerticalAlignment="Center"
+                                                   Width="90" Margin="0,0,8,0" Opacity="0.7"/>
+
+                                        <TextBlock Text="当前值:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBlock Text="{Binding Value}" VerticalAlignment="Center"
+                                                   Width="120" Margin="0,0,8,0" FontWeight="Medium"/>
+
+                                        <!-- 上下限（仅有上下限的参数显示） -->
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <StackPanel.Style>
+                                                <Style TargetType="StackPanel">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasLimits}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </StackPanel.Style>
+                                            <TextBlock Text="下限:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBlock Text="{Binding LowerLimit}" VerticalAlignment="Center" Width="60"/>
+                                            <TextBlock Text="上限:" VerticalAlignment="Center" Margin="6,0,4,0"/>
+                                            <TextBlock Text="{Binding UpperLimit}" VerticalAlignment="Center" Width="60"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </materialDesign:Card>
+
+        <!-- 工位列表区：包含特殊行 + 数据行 -->
+        <materialDesign:Card Padding="0">
+            <DockPanel>
+                <!-- 数据行 DataGrid（动态工位列） -->
+                <DataGrid x:Name="DetectionDataGrid" AutoGenerateColumns="False" IsReadOnly="False"
+                          HeadersVisibility="Column"
+                          CanUserAddRows="False"
+                          ItemsSource="{Binding DetectionRows}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="序号" Binding="{Binding Order}" Width="60" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="参数名称" Binding="{Binding ParameterName}" Width="150" IsReadOnly="True"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </materialDesign:Card>
+    </DockPanel>
+</UserControl>

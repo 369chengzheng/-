@@ -1,0 +1,93 @@
+<!--
+    =============================================================================
+    文件名：VersionView.xaml
+    功能描述：版本迭代视图。以表格形式展示版本号、发布日期与更新内容
+    （多行显示，按发布日期倒序），供用户查看版本迭代记录。
+    =============================================================================
+-->
+<UserControl
+    x:Class="IMDP.Presentation.Views.VersionView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:viewmodels="clr-namespace:IMDP.Presentation.ViewModels"
+    d:DataContext="{d:DesignInstance Type=viewmodels:VersionViewModel}"
+    d:DesignHeight="600"
+    d:DesignWidth="1000"
+    Background="{DynamicResource MaterialDesignPaper}"
+    mc:Ignorable="d">
+    <DockPanel Margin="16">
+        <!--  面包屑导航区：首页 > 版本迭代  -->
+        <StackPanel
+            Margin="0,0,0,12"
+            DockPanel.Dock="Top"
+            Orientation="Horizontal">
+            <Button
+                Command="{Binding GoHomeCommand}"
+                Content="首页"
+                Style="{StaticResource BreadcrumbButtonStyle}" />
+            <materialDesign:PackIcon
+                Width="16"
+                Height="16"
+                Foreground="{DynamicResource MaterialDesignBody}"
+                Kind="ChevronRight"
+                Opacity="0.5" />
+            <TextBlock Style="{StaticResource BreadcrumbCurrentStyle}" Text="版本迭代" />
+        </StackPanel>
+
+        <!--  版本迭代列表：版本号、发布日期、更新内容（多行显示，按发布日期倒序）  -->
+        <materialDesign:Card Padding="16">
+            <DockPanel>
+                <TextBlock
+                    Margin="0,0,0,12"
+                    DockPanel.Dock="Top"
+                    FontSize="16"
+                    FontWeight="Bold"
+                    Text="版本迭代列表" />
+                <DataGrid
+                    AutoGenerateColumns="False"
+                    CanUserAddRows="False"
+                    CanUserDeleteRows="False"
+                    GridLinesVisibility="Horizontal"
+                    HeadersVisibility="Column"
+                    IsReadOnly="True"
+                    ItemsSource="{Binding VersionRecords}">
+                    <DataGrid.Columns>
+                        <!--  版本号列：可点击，点击后触发升级更新窗口（4.2）传入目标版本号  -->
+                        <DataGridTemplateColumn Width="120" Header="版本号">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Button
+                                        HorizontalAlignment="Left"
+                                        Command="{Binding DataContext.SelectVersionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}"
+                                        Content="{Binding Version}"
+                                        Cursor="Hand"
+                                        Foreground="#1976D2"
+                                        Style="{StaticResource BreadcrumbButtonStyle}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn
+                            Width="140"
+                            Binding="{Binding ReleaseDate, StringFormat=yyyy-MM-dd}"
+                            Header="发布日期" />
+                        <DataGridTemplateColumn Width="*" Header="更新内容">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <!--  更新内容多行显示（ReleaseNotes 中以 \n 分隔）  -->
+                                    <TextBlock
+                                        Padding="4"
+                                        Text="{Binding ReleaseNotes}"
+                                        TextWrapping="Wrap" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </materialDesign:Card>
+    </DockPanel>
+</UserControl>

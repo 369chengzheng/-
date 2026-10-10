@@ -1,0 +1,103 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.7.11919.86 stable
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Presentation", "src\IMDP.Presentation\IMDP.Presentation.csproj", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Domain", "src\IMDP.Domain\IMDP.Domain.csproj", "{B2C3D4E5-F6A7-8901-BCDE-F12345678901}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Application", "src\IMDP.Application\IMDP.Application.csproj", "{C3D4E5F6-A7B8-9012-CDEF-123456789012}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Infrastructure", "src\IMDP.Infrastructure\IMDP.Infrastructure.csproj", "{D4E5F6A7-B8C9-0123-DEF1-234567890123}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Products.GasDG.WholeA", "src\Products\GasDG\IMDP.Products.GasDG.WholeA\IMDP.Products.GasDG.WholeA.csproj", "{E5F6A7B8-C9D0-1234-EF12-345678901234}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Products.WaterDW.ProductA", "src\Products\WaterDW\IMDP.Products.WaterDW.ProductA\IMDP.Products.WaterDW.ProductA.csproj", "{F1A2B3C4-D5E6-7890-ABCD-123456789ABC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Products.GasOG.ProductA", "src\Products\GasOG\IMDP.Products.GasOG.ProductA\IMDP.Products.GasOG.ProductA.csproj", "{A2B3C4D5-E6F7-8901-BCDE-23456789ABCD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Products.WaterOW.ProductA", "src\Products\WaterOW\IMDP.Products.WaterOW.ProductA\IMDP.Products.WaterOW.ProductA.csproj", "{B3C4D5E6-F7A8-9012-CDEF-3456789ABCDE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Products.GasDG.BoardA", "src\Products\GasDG\IMDP.Products.GasDG.BoardA\IMDP.Products.GasDG.BoardA.csproj", "{D5E6F7A8-B9C0-1234-DEF1-567890ABCDEF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Products.GasDG.LaserDetector", "src\Products\GasDG\IMDP.Products.GasDG.LaserDetector\IMDP.Products.GasDG.LaserDetector.csproj", "{C7D8E9F0-A1B2-3456-BCDE-567890ABCDEF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{F7A8B9C0-D1E2-3456-FA23-7890ABCDEF12}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IMDP.Products.GasDG.WholeA.Tests", "tests\IMDP.Products.GasDG.WholeA.Tests\IMDP.Products.GasDG.WholeA.Tests.csproj", "{E6F7A8B9-C0D1-2345-EF12-67890ABCDEF1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "GasDG", "GasDG", "{7B68B4D7-1B77-41A3-A53D-FB8AAD8A42E6}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "GasOG", "GasOG", "{676989F1-EE0B-4C2D-98C6-26A41E49A9A8}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WaterDW", "WaterDW", "{C6AEE3A3-589B-47F1-A7EC-0F400E991731}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "WaterOW", "WaterOW", "{D1242F4A-E334-45CD-8FBB-B23B230B2F0D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B2C3D4E5-F6A7-8901-BCDE-F12345678901}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3D4E5F6-A7B8-9012-CDEF-123456789012}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4E5F6A7-B8C9-0123-DEF1-234567890123}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E5F6A7B8-C9D0-1234-EF12-345678901234}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E5F6A7B8-C9D0-1234-EF12-345678901234}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E5F6A7B8-C9D0-1234-EF12-345678901234}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E5F6A7B8-C9D0-1234-EF12-345678901234}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F1A2B3C4-D5E6-7890-ABCD-123456789ABC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F1A2B3C4-D5E6-7890-ABCD-123456789ABC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F1A2B3C4-D5E6-7890-ABCD-123456789ABC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F1A2B3C4-D5E6-7890-ABCD-123456789ABC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A2B3C4D5-E6F7-8901-BCDE-23456789ABCD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A2B3C4D5-E6F7-8901-BCDE-23456789ABCD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A2B3C4D5-E6F7-8901-BCDE-23456789ABCD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A2B3C4D5-E6F7-8901-BCDE-23456789ABCD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3C4D5E6-F7A8-9012-CDEF-3456789ABCDE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3C4D5E6-F7A8-9012-CDEF-3456789ABCDE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3C4D5E6-F7A8-9012-CDEF-3456789ABCDE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3C4D5E6-F7A8-9012-CDEF-3456789ABCDE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D5E6F7A8-B9C0-1234-DEF1-567890ABCDEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5E6F7A8-B9C0-1234-DEF1-567890ABCDEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D5E6F7A8-B9C0-1234-DEF1-567890ABCDEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D5E6F7A8-B9C0-1234-DEF1-567890ABCDEF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7D8E9F0-A1B2-3456-BCDE-567890ABCDEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7D8E9F0-A1B2-3456-BCDE-567890ABCDEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7D8E9F0-A1B2-3456-BCDE-567890ABCDEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7D8E9F0-A1B2-3456-BCDE-567890ABCDEF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E6F7A8B9-C0D1-2345-EF12-67890ABCDEF1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E6F7A8B9-C0D1-2345-EF12-67890ABCDEF1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E6F7A8B9-C0D1-2345-EF12-67890ABCDEF1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E6F7A8B9-C0D1-2345-EF12-67890ABCDEF1}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E5F6A7B8-C9D0-1234-EF12-345678901234} = {7B68B4D7-1B77-41A3-A53D-FB8AAD8A42E6}
+		{D5E6F7A8-B9C0-1234-DEF1-567890ABCDEF} = {7B68B4D7-1B77-41A3-A53D-FB8AAD8A42E6}
+		{C7D8E9F0-A1B2-3456-BCDE-567890ABCDEF} = {7B68B4D7-1B77-41A3-A53D-FB8AAD8A42E6}
+		{F1A2B3C4-D5E6-7890-ABCD-123456789ABC} = {C6AEE3A3-589B-47F1-A7EC-0F400E991731}
+		{A2B3C4D5-E6F7-8901-BCDE-23456789ABCD} = {676989F1-EE0B-4C2D-98C6-26A41E49A9A8}
+		{B3C4D5E6-F7A8-9012-CDEF-3456789ABCDE} = {D1242F4A-E334-45CD-8FBB-B23B230B2F0D}
+		{E6F7A8B9-C0D1-2345-EF12-67890ABCDEF1} = {F7A8B9C0-D1E2-3456-FA23-7890ABCDEF12}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2625237B-D3C5-4210-8FB8-81866CDBA14F}
+	EndGlobalSection
+EndGlobal

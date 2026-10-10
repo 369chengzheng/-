@@ -1,0 +1,279 @@
+<!--
+    =============================================================================
+    文件名：UpdateWindow.xaml
+    功能描述：升级更新窗口。展示当前版本与最新版本信息、升级技术方案
+    （AutoUpdater.NET + 内网 IIS + 独立 Updater 进程）、架构示意与
+    技术实现要点，并提供立即更新与稍后提醒操作。
+    =============================================================================
+-->
+<Window
+    x:Class="IMDP.Presentation.Views.UpdateWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="clr-namespace:IMDP.Presentation.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:prism="http://prismlibrary.com/"
+    xmlns:viewmodels="clr-namespace:IMDP.Presentation.ViewModels"
+    Title="升级更新"
+    Width="800"
+    Height="650"
+    d:DataContext="{d:DesignInstance Type=viewmodels:UpdateViewModel}"
+    d:DesignHeight="650"
+    d:DesignWidth="800"
+    prism:ViewModelLocator.AutoWireViewModel="True"
+    Background="White"
+    FontFamily="Microsoft YaHei UI"
+    ResizeMode="NoResize"
+    WindowStartupLocation="CenterScreen"
+    mc:Ignorable="d">
+    <Window.Resources>
+        <ResourceDictionary>
+            <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
+            <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="16" />
+                <Setter Property="FontWeight" Value="Bold" />
+                <Setter Property="Margin" Value="0,16,0,8" />
+                <Setter Property="Foreground" Value="#333333" />
+            </Style>
+            <Style x:Key="BodyTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Foreground" Value="#555555" />
+            </Style>
+            <Style x:Key="CodeTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="FontFamily" Value="Consolas,Courier New" />
+                <Setter Property="Foreground" Value="#333333" />
+                <Setter Property="Background" Value="#F0F0F0" />
+                <Setter Property="Padding" Value="2,1" />
+                <Setter Property="Margin" Value="0,0,2,0" />
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!--  顶部标题栏：更新图标、标题、本机信息  -->
+        <Border
+            Grid.Row="0"
+            Padding="16,12"
+            Background="#F5F5F5"
+            BorderBrush="#DDDDDD"
+            BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <materialDesign:PackIcon
+                        Width="28"
+                        Height="28"
+                        VerticalAlignment="Center"
+                        Foreground="#1976D2"
+                        Kind="Update" />
+                    <TextBlock
+                        Margin="12,0,0,0"
+                        VerticalAlignment="Center"
+                        FontSize="20"
+                        FontWeight="Bold"
+                        Text="升级更新" />
+                </StackPanel>
+                <StackPanel
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal">
+                    <TextBlock
+                        Margin="4,0,12,0"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Text="{Binding ClientMachineName}" />
+                    <TextBlock
+                        Margin="4,0,0,0"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Text="{Binding ClientIpAddress}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!--  滚动内容区：版本信息、技术方案、架构示意、实现要点  -->
+        <ScrollViewer
+            Grid.Row="1"
+            Margin="0,0,0,1"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <Grid Margin="24">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border
+                    Grid.Row="0"
+                    Margin="0,0,0,16"
+                    Padding="16"
+                    BorderBrush="#E0E0E0"
+                    BorderThickness="1"
+                    CornerRadius="4">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            FontSize="13"
+                            Foreground="#666666"
+                            Text="当前版本:" />
+                        <TextBlock
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Margin="0,2,0,12"
+                            FontSize="16"
+                            FontWeight="SemiBold"
+                            Text="{Binding CurrentVersion}" />
+                        <TextBlock
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            FontSize="13"
+                            Foreground="#666666"
+                            Text="最新版本:" />
+                        <TextBlock
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Margin="0,2,0,12"
+                            FontSize="16"
+                            FontWeight="SemiBold"
+                            Foreground="#1976D2"
+                            Text="{Binding LatestVersion}" />
+                        <TextBlock
+                            Grid.Row="2"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            FontSize="13"
+                            Foreground="#666666"
+                            Text="更新内容:" />
+                        <TextBlock
+                            Grid.Row="3"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            Margin="0,2,0,0"
+                            FontSize="13"
+                            Text="{Binding ReleaseNotes}"
+                            TextWrapping="Wrap" />
+                    </Grid>
+                </Border>
+            </Grid>
+        </ScrollViewer>
+
+        <!--  底部操作栏：下载进度、状态消息、立即更新/暂不更新按钮  -->
+        <Border
+            Grid.Row="2"
+            Padding="16,12"
+            Background="#F5F5F5"
+            BorderBrush="#DDDDDD"
+            BorderThickness="0,1,0,0">
+            <Grid>
+                <!--  免更新密钥输入区（用户点击"暂不更新"后显示）  -->
+                <StackPanel
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Visibility="{Binding IsSkipKeyDialogVisible, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TextBlock
+                        Margin="0,0,8,0"
+                        VerticalAlignment="Center"
+                        FontSize="13"
+                        Text="免更新密钥:" />
+                    <TextBox
+                        Width="200"
+                        Height="32"
+                        Margin="0,0,8,0"
+                        VerticalContentAlignment="Center"
+                        Text="{Binding SkipUpdateKeyInput, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button
+                        Width="70"
+                        Height="32"
+                        Margin="0,0,8,0"
+                        Background="#1976D2"
+                        BorderThickness="0"
+                        Command="{Binding ValidateSkipKeyCommand}"
+                        Content="确认"
+                        Foreground="White" />
+                    <Button
+                        Width="70"
+                        Height="32"
+                        Background="White"
+                        BorderBrush="#CCCCCC"
+                        Command="{Binding CancelSkipKeyCommand}"
+                        Content="取消" />
+                    <TextBlock
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        Foreground="#D32F2F"
+                        Text="{Binding SkipKeyErrorMessage}"
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <!--  默认操作区：下载进度、状态消息、立即更新/暂不更新按钮  -->
+                <Grid Visibility="{Binding IsSkipKeyDialogVisible, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                        <TextBlock
+                            Margin="0,4,0,0"
+                            FontSize="13"
+                            Foreground="#666666"
+                            Text="{Binding StatusMessage}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <Button
+                            Width="100"
+                            Height="36"
+                            Margin="0,0,8,0"
+                            Background="#1976D2"
+                            BorderThickness="0"
+                            Command="{Binding UpdateCommand}"
+                            Content="立即更新"
+                            Foreground="White" />
+                        <Button
+                            Width="100"
+                            Height="36"
+                            Background="White"
+                            BorderBrush="#CCCCCC"
+                            Command="{Binding LaterCommand}"
+                            Content="暂不更新" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

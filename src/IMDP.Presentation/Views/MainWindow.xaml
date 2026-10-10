@@ -1,0 +1,388 @@
+<!--
+    =============================================================================
+    文件名：MainWindow.xaml
+    功能描述：应用程序主窗口。采用无边框自定义样式，包含顶部标题栏（菜单按钮、
+    标题、最小化/最大化/关闭按钮）、主内容区（Prism 区域注入）与底部状态栏
+    （工位、工号、登录时间、退出登录）。菜单弹窗提供功能模块导航入口，
+    根据登录状态与角色权限动态显示菜单项。
+    =============================================================================
+-->
+<Window
+    x:Class="IMDP.Presentation.Views.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="clr-namespace:IMDP.Presentation.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:prism="http://prismlibrary.com/"
+    xmlns:products="clr-namespace:IMDP.Domain.Products;assembly=IMDP.Domain"
+    xmlns:viewModels="clr-namespace:IMDP.Presentation.ViewModels"
+    Title="智造检测平台"
+    Width="1280"
+    Height="720"
+    d:DataContext="{d:DesignInstance Type=viewModels:MainWindowViewModel,
+                                     IsDesignTimeCreatable=False}"
+    prism:ViewModelLocator.AutoWireViewModel="True"
+    AllowsTransparency="True"
+    Background="{StaticResource ImdpPageBackgroundBrush}"
+    FontFamily="Microsoft YaHei UI"
+    ResizeMode="CanResizeWithGrip"
+    TextElement.FontWeight="Regular"
+    TextElement.Foreground="{DynamicResource MaterialDesignBody}"
+    TextOptions.TextFormattingMode="Ideal"
+    TextOptions.TextRenderingMode="Auto"
+    WindowStartupLocation="CenterScreen"
+    WindowStyle="None"
+    mc:Ignorable="d">
+    <WindowChrome.WindowChrome>
+        <WindowChrome
+            CaptionHeight="56"
+            CornerRadius="0"
+            GlassFrameThickness="0" />
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
+        <converters:FunctionModuleTypeDisplayConverter x:Key="FunctionModuleTypeDisplayConverter" />
+
+        <!--  深蓝标题栏中的窗口操作按钮  -->
+        <Style x:Key="ShellCaptionButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="52" />
+            <Setter Property="Height" Value="56" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontSize" Value="19" />
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#26FFFFFF" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--  底部状态栏的退出按钮  -->
+        <Style x:Key="ShellLogoutButtonStyle"
+               TargetType="Button"
+               BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Width" Value="104" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Background" Value="#1769E8" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontSize" Value="12" />
+        </Style>
+
+        <!--  菜单项按钮样式：悬停高亮  -->
+        <Style x:Key="MenuItemButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource MaterialDesignBody}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="16,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border
+                            Padding="{TemplateBinding Padding}"
+                            Background="{TemplateBinding Background}"
+                            SnapsToDevicePixels="True">
+                            <ContentPresenter
+                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                VerticalAlignment="Center"
+                                SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource MaterialDesignDivider}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Border BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1">
+        <Grid>
+            <DockPanel LastChildFill="True">
+                <!--  顶部标题栏  -->
+                <Grid
+                    Height="56"
+                    Background="{StaticResource ImdpShellBrush}"
+                    DockPanel.Dock="Top">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button
+                        Grid.Column="0"
+                        Command="{Binding MenuCommand}"
+                        Content="☰"
+                        FontSize="23"
+                        Style="{StaticResource ShellCaptionButtonStyle}" />
+
+                    <StackPanel
+                        Grid.Column="1"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontSize="18"
+                            FontWeight="Bold"
+                            Foreground="White"
+                            Text="智造检测平台" />
+                        <TextBlock
+                            Margin="14,0,0,0"
+                            VerticalAlignment="Center"
+                            FontSize="13"
+                            Foreground="White"
+                            Opacity="0.9"
+                            Text="{Binding AppVersion}" />
+                    </StackPanel>
+
+                    <StackPanel
+                        Grid.Column="3"
+                        HorizontalAlignment="Right"
+                        Orientation="Horizontal">
+                        <Button
+                            Click="MinimizeButton_Click"
+                            Content="─"
+                            Style="{StaticResource ShellCaptionButtonStyle}" />
+                        <Button
+                            Click="MaximizeButton_Click"
+                            Content="▢"
+                            Style="{StaticResource ShellCaptionButtonStyle}" />
+                        <Button
+                            Click="CloseButton_Click"
+                            Content="✕"
+                            Style="{StaticResource ShellCaptionButtonStyle}" />
+                    </StackPanel>
+                </Grid>
+
+                <!--  底部状态栏  -->
+                <Grid
+                    Height="40"
+                    VerticalAlignment="Bottom"
+                    Background="{StaticResource ImdpShellBrush}"
+                    DockPanel.Dock="Bottom">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel
+                        Grid.Column="0"
+                        Margin="28,0,0,0"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <TextBlock
+                            FontSize="12"
+                            Foreground="White"
+                            Opacity="0.82"
+                            Text="工位：" />
+                        <TextBlock
+                            Margin="4,0,14,0"
+                            FontSize="12"
+                            Foreground="White"
+                            Text="{Binding Station}" />
+                        <TextBlock
+                            Margin="0,0,14,0"
+                            FontSize="12"
+                            Foreground="White"
+                            Opacity="0.5"
+                            Text="|" />
+                        <TextBlock
+                            FontSize="12"
+                            Foreground="White"
+                            Opacity="0.82"
+                            Text="工号：" />
+                        <TextBlock
+                            Margin="4,0,14,0"
+                            FontSize="12"
+                            Foreground="White"
+                            Text="{Binding WorkNumber}" />
+                        <TextBlock
+                            Margin="0,0,14,0"
+                            FontSize="12"
+                            Foreground="White"
+                            Opacity="0.5"
+                            Text="|" />
+                        <TextBlock
+                            FontSize="12"
+                            Foreground="White"
+                            Opacity="0.82"
+                            Text="登录时间：" />
+                        <TextBlock
+                            Margin="4,0,16,0"
+                            FontSize="12"
+                            Foreground="White"
+                            Text="{Binding LoginTime}" />
+                    </StackPanel>
+                    <Button
+                        Grid.Column="1"
+                        Margin="0,0,18,0"
+                        Command="{Binding LogoutCommand}"
+                        Style="{StaticResource ShellLogoutButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Width="16" Height="16" Margin="0,0,6,0" Kind="Power"/>
+                            <TextBlock VerticalAlignment="Center" Text="退出登录"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <!--  主内容区  -->
+                <ContentControl Background="{StaticResource ImdpPageBackgroundBrush}"
+                                prism:RegionManager.RegionName="MainContentRegion" />
+            </DockPanel>
+
+            <!--  菜单弹窗（点击☰按钮显示）  -->
+            <Popup
+                Width="340"
+                AllowsTransparency="True"
+                HorizontalOffset="-12"
+                IsOpen="{Binding IsMenuPopupOpen}"
+                Placement="Bottom"
+                PlacementTarget="{Binding ElementName=MenuButtonPlaceholder, Mode=OneWay}"
+                PopupAnimation="Fade"
+                VerticalOffset="4">
+                <Border
+                    Padding="0,8"
+                    Background="{DynamicResource MaterialDesignCardBackground}"
+                    BorderBrush="{DynamicResource MaterialDesignDivider}"
+                    BorderThickness="1"
+                    CornerRadius="2"
+                    MouseLeave="MenuPopup_MouseLeave">
+                    <StackPanel>
+                        <!--  登录后显示的菜单项  -->
+                        <StackPanel Visibility="{Binding IsLoggedIn, Converter={StaticResource BoolToVisibility}}">
+                            <!--  产品功能模块菜单（来自当前物料号绑定的插件）  -->
+                            <ItemsControl ItemsSource="{Binding MenuItems}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button
+                                            Command="{Binding DataContext.MenuItemClickCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            Height="Auto"
+                                            MinHeight="36"
+                                            Style="{StaticResource MenuItemButtonStyle}"
+                                            ToolTip="{Binding DisplayName}">
+                                            <TextBlock
+                                                MaxWidth="306"
+                                                Margin="0,6"
+                                                Text="{Binding DisplayName}"
+                                                TextWrapping="Wrap" />
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!--  分隔线  -->
+                            <Separator Margin="16,8,16,8" />
+
+                            <!--  系统级菜单：所有角色可见  -->
+                            <Button
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="VersionView"
+                                Content="版本迭代"
+                                Style="{StaticResource MenuItemButtonStyle}" />
+                            <Button
+                                Command="{Binding CheckUpdateCommand}"
+                                Content="检查更新"
+                                Style="{StaticResource MenuItemButtonStyle}" />
+                            <Button
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="BoardQueryView"
+                                Content="模块检测记录查询"
+                                Style="{StaticResource MenuItemButtonStyle}"
+                                Visibility="{Binding IsConfiguratorOrAbove, Converter={StaticResource BoolToVisibility}}" />
+                            <Button
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="WholeQueryView"
+                                Content="整机检测记录查询"
+                                Style="{StaticResource MenuItemButtonStyle}"
+                                Visibility="{Binding IsConfiguratorOrAbove, Converter={StaticResource BoolToVisibility}}" />
+
+                            <!--  系统级菜单：仅配置员及以上可见  -->
+                            <Button
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="BoardConfigHistoryView"
+                                Content="模块配置方案查询"
+                                Style="{StaticResource MenuItemButtonStyle}"
+                                Visibility="{Binding IsConfiguratorOrAbove, Converter={StaticResource BoolToVisibility}}" />
+                            <Button
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="WholeConfigHistoryView"
+                                Content="整机配置方案查询"
+                                Style="{StaticResource MenuItemButtonStyle}"
+                                Visibility="{Binding IsConfiguratorOrAbove, Converter={StaticResource BoolToVisibility}}" />
+
+                            <!--  系统级菜单：仅系统管理员可见  -->
+                            <Separator Margin="16,8,16,8" Visibility="{Binding IsConfiguratorOrAbove, Converter={StaticResource BoolToVisibility}}" />
+                            <Button
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="UserManageView"
+                                Content="用户管理"
+                                Style="{StaticResource MenuItemButtonStyle}"
+                                Visibility="{Binding IsAdminOrAbove, Converter={StaticResource BoolToVisibility}}" />
+                            <Button
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="MaterialProductMapView"
+                                Content="物料产品维护"
+                                Style="{StaticResource MenuItemButtonStyle}"
+                                Visibility="{Binding IsSystemAdmin, Converter={StaticResource BoolToVisibility}}" />
+                            <Button
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="LoginQueryView"
+                                Content="登录日志查询"
+                                Style="{StaticResource MenuItemButtonStyle}"
+                                Visibility="{Binding IsSystemAdmin, Converter={StaticResource BoolToVisibility}}" />
+                            <Button
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="UpdateQueryView"
+                                Content="升级日志查询"
+                                Style="{StaticResource MenuItemButtonStyle}"
+                                Visibility="{Binding IsSystemAdmin, Converter={StaticResource BoolToVisibility}}" />
+                            <Button
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="OrderSwitchQueryView"
+                                Content="工单切换日志查询"
+                                Style="{StaticResource MenuItemButtonStyle}"
+                                Visibility="{Binding IsSystemAdmin, Converter={StaticResource BoolToVisibility}}" />
+                        </StackPanel>
+
+                        <!--  未登录时显示提示  -->
+                        <TextBlock
+                            Margin="16"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            Foreground="{DynamicResource MaterialDesignBodyLight}"
+                            Text="请先登录"
+                            Visibility="{Binding IsLoggedIn, Converter={StaticResource InverseBoolToVisibility}}" />
+                    </StackPanel>
+                </Border>
+            </Popup>
+
+            <!--  隐藏的占位元素，用于 Popup 定位  -->
+            <FrameworkElement
+                x:Name="MenuButtonPlaceholder"
+                Width="0"
+                Height="0"
+                Margin="52,56,0,0"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top" />
+        </Grid>
+    </Border>
+</Window>

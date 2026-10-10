@@ -1,0 +1,301 @@
+<UserControl x:Class="IMDP.Products.GasDG.WholeA.Views.WholeConfigView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:prism="http://prismlibrary.com/"
+             xmlns:vm="clr-namespace:IMDP.Products.GasDG.WholeA.ViewModels"
+             xmlns:dto="clr-namespace:IMDP.Application.DTOs;assembly=IMDP.Application"
+             prism:ViewModelLocator.AutoWireViewModel="True"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="1200"
+             Background="{DynamicResource MaterialDesignPaper}">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <!-- =============================================================================
+             值编辑器模板（ValueEditorTemplate）
+             功能：基于 ConfigParameter.ControlType 动态选择编辑控件，集成 Validator 校验提示。
+             控件切换规则：
+               - ControlType=ComboBox  → 显示 ComboBox（枚举参数，选项来自 Options）
+               - ControlType=TextBox   → 显示 TextBox（普通字符串/数值输入）
+               - ControlType=NumericUpDown → 显示 TextBox（用 TextBox 模拟，ToolTip 提示范围）
+               - ControlType=CheckBox  → 不处理（当前业务无布尔参数）
+             Validator 集成：
+               - MaxLength：绑定到 TextBox.MaxLength 限制输入长度
+               - ValidationToolTip：聚合 Description + 范围/正则/错误信息，悬停提示
+             复用位置：父参数卡片、常规参数卡片、子参数卡片（消除约 60 行重复模板）
+             ============================================================================= -->
+        <DataTemplate x:Key="ValueEditorTemplate" DataType="{x:Type vm:ConfigParameter}">
+            <Grid>
+                <!-- ComboBox：ControlType=ComboBox（枚举参数）时显示 -->
+                <ComboBox ItemsSource="{Binding Options}"
+                          SelectedValue="{Binding Value}"
+                          SelectedValuePath="Key"
+                          DisplayMemberPath="Display"
+                          Width="140" Margin="8,0,0,0"
+                          VerticalAlignment="Center"
+                          ToolTip="{Binding ValidationToolTip}">
+                    <ComboBox.Style>
+                        <Style TargetType="ComboBox">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ControlType}"
+                                             Value="{x:Static dto:ParameterControlType.ComboBox}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ComboBox.Style>
+                </ComboBox>
+
+                <!-- TextBox：ControlType=TextBox 或 NumericUpDown 时显示（NumericUpDown 用 TextBox 模拟） -->
+                <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+                         Width="140" Margin="8,0,0,0"
+                         VerticalAlignment="Center"
+                         MaxLength="{Binding MaxLength}"
+                         ToolTip="{Binding ValidationToolTip}">
+                    <TextBox.Style>
+                        <Style TargetType="TextBox">
+                            <Setter Property="Visibility" Value="Visible"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ControlType}"
+                                             Value="{x:Static dto:ParameterControlType.ComboBox}">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBox.Style>
+                </TextBox>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <DockPanel Margin="16">
+        <!-- 面包屑：首页 > 软件物料号 > 当前页 -->
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,16">
+            <Button Content="首页" Style="{StaticResource BreadcrumbButtonStyle}"
+                    Command="{Binding GoHomeCommand}"/>
+            <materialDesign:PackIcon Kind="ChevronRight" Width="16" Height="16"
+                                     Foreground="{DynamicResource MaterialDesignBody}" Opacity="0.5">
+                <materialDesign:PackIcon.Style>
+                    <Style TargetType="materialDesign:PackIcon">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentMaterialNumber}" Value="">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </materialDesign:PackIcon.Style>
+            </materialDesign:PackIcon>
+            <TextBlock Text="{Binding CurrentMaterialNumber}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource BreadcrumbCurrentStyle}">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding CurrentMaterialNumber}" Value="">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+            <materialDesign:PackIcon Kind="ChevronRight" Width="16" Height="16"
+                                     Foreground="{DynamicResource MaterialDesignBody}" Opacity="0.5"/>
+            <TextBlock Text="{Binding CurrentPageName}" Style="{StaticResource BreadcrumbCurrentStyle}"/>
+        </StackPanel>
+
+        <!-- 顶部工具栏：产品编码、客户编码、查询/维护/删除按钮 -->
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0" Text="产品编码:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBox Grid.Column="1" materialDesign:HintAssist.Hint="产品编码"
+                     Text="{Binding ProductCode, UpdateSourceTrigger=PropertyChanged}"
+                     Margin="0,0,16,0"/>
+
+            <TextBlock Grid.Column="2" Text="客户编码:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <TextBox Grid.Column="3" materialDesign:HintAssist.Hint="客户编码"
+                     Text="{Binding CustomerCode, UpdateSourceTrigger=PropertyChanged}"
+                     Margin="0,0,16,0"/>
+
+            <StackPanel Grid.Column="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="查询" Command="{Binding QueryCommand}" Width="80" Height="32" Margin="0,0,8,0"/>
+                <Button Content="维护" Command="{Binding SaveCommand}" Width="80" Height="32" Margin="0,0,8,0"/>
+                <Button Content="删除" Command="{Binding DeleteCommand}" Width="80" Height="32"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- 参数配置区：包含工位数量输入 + 检测项目卡片列表 -->
+        <materialDesign:Card DockPanel.Dock="Top" Padding="16" Margin="0,0,0,16">
+            <StackPanel>
+                <TextBlock Text="检测方案区" FontWeight="Bold" Margin="0,0,0,12"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <TextBlock Text="工位数量:" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBox Text="{Binding StationCount, UpdateSourceTrigger=PropertyChanged}"
+                             Width="60" Margin="0,0,16,0"/>
+                </StackPanel>
+
+                <!-- 检测项目卡片列表：每个 ConfigParameter 作为独立卡片展示 -->
+                <ItemsControl ItemsSource="{Binding OtherParameters}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:ConfigParameter}">
+                            <Grid>
+                                <!-- ============================================== -->
+                                <!-- 合并父参数卡片：勾选框 + 名称 + MES代码 + 值编辑器 + 子参数内联展示 -->
+                                <!-- 可见性条件：IsMergedParent=True 且 IsVisible=True -->
+                                <!-- ============================================== -->
+                                <Border BorderBrush="{DynamicResource MaterialDesignPrimary}"
+                                        BorderThickness="1.5" Padding="10,8" Margin="4,4"
+                                        CornerRadius="4"
+                                        Background="{DynamicResource MaterialDesignCardBackground}"
+                                        ToolTip="{Binding Description}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsMergedParent}" Value="True"/>
+                                                        <Condition Binding="{Binding IsVisible}" Value="True"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox IsChecked="{Binding IsEnabled}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                   Width="100" Margin="8,0,8,0" FontWeight="Bold"/>
+                                        <TextBlock Text="MES代码:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBox Text="{Binding MesCode, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="110" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                 ToolTip="{Binding Code, StringFormat='系统识别码: {0}'}"/>
+
+                                        <!-- 父参数值编辑器：基于 ControlType 选择控件（复用 ValueEditorTemplate） -->
+                                        <ContentControl Content="{Binding}"
+                                                        ContentTemplate="{StaticResource ValueEditorTemplate}"
+                                                        Padding="0"/>
+
+                                        <!-- 子参数内联展示（无勾选框、无 MES 代码） -->
+                                        <ItemsControl ItemsSource="{Binding SubParameters}" Margin="8,0,0,0">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:ConfigParameter}">
+                                                    <StackPanel Orientation="Horizontal" Margin="0,0,12,4">
+                                                        <StackPanel.Style>
+                                                            <Style TargetType="StackPanel">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsVisible}" Value="False">
+                                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </StackPanel.Style>
+                                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                                   Margin="0,0,4,0"/>
+                                                        <!-- 子参数值编辑器：基于 ControlType 选择控件（复用 ValueEditorTemplate） -->
+                                                        <ContentControl Content="{Binding}"
+                                                                        ContentTemplate="{StaticResource ValueEditorTemplate}"
+                                                                        Padding="0"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- ============================================== -->
+                                <!-- 常规参数卡片：勾选框 + 名称 + MES代码 + 值编辑器 + 上下限 -->
+                                <!-- 可见性条件：IsMergedParent=False 且 IsVisible=True -->
+                                <!-- ============================================== -->
+                                <Border BorderBrush="{DynamicResource MaterialDesignDivider}"
+                                        BorderThickness="1" Padding="8" Margin="4,2"
+                                        ToolTip="{Binding Description}">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsMergedParent}" Value="False"/>
+                                                        <Condition Binding="{Binding IsVisible}" Value="True"/>
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel Orientation="Horizontal">
+                                        <CheckBox IsChecked="{Binding IsEnabled}" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                                                   Width="100" Margin="8,0,8,0"/>
+
+                                        <!-- MES 代码字段（用户可编辑，ToolTip 显示系统识别码） -->
+                                        <TextBlock Text="MES代码:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <TextBox Text="{Binding MesCode, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="90" Margin="0,0,8,0" VerticalAlignment="Center"
+                                                 ToolTip="{Binding Code, StringFormat='系统识别码: {0}'}"/>
+
+                                        <!-- 值编辑器：基于 ControlType 选择控件（复用 ValueEditorTemplate） -->
+                                        <ContentControl Content="{Binding}"
+                                                        ContentTemplate="{StaticResource ValueEditorTemplate}"
+                                                        Padding="0"/>
+
+                                        <!-- 上下限（仅有上下限的参数显示，HasLimits 控制可见性） -->
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center"
+                                                    Visibility="{Binding HasLimits, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="下限:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox Text="{Binding LowerLimit}" Width="60" Margin="0,0,8,0"/>
+                                            <TextBlock Text="上限:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox Text="{Binding UpperLimit}" Width="60"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </materialDesign:Card>
+
+        <!-- 方案列表：已保存的检测方案 DataGrid -->
+        <materialDesign:Card Padding="8">
+            <DataGrid AutoGenerateColumns="False" IsReadOnly="True"
+                      SelectionMode="Single"
+                      ItemsSource="{Binding Plans}"
+                      SelectedItem="{Binding SelectedPlan}">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="产品编码" Binding="{Binding ProductCode}" Width="120"/>
+                    <DataGridTextColumn Header="客户编码" Binding="{Binding CustomerCode}" Width="120"/>
+                    <DataGridTextColumn Header="物料编号" Binding="{Binding MaterialNumber}" Width="120"/>
+                    <DataGridTextColumn Header="工位" Binding="{Binding StationCount}" Width="60"/>
+                    <DataGridTextColumn Header="创建人" Binding="{Binding CreatedBy}" Width="80"/>
+                    <DataGridTextColumn Header="创建时间" Binding="{Binding CreatedTime, StringFormat=yyyy-MM-dd HH:mm}" Width="150"/>
+                    <DataGridTextColumn Header="更新人" Binding="{Binding UpdatedBy}" Width="80"/>
+                    <DataGridTextColumn Header="更新时间" Binding="{Binding UpdatedTime, StringFormat=yyyy-MM-dd HH:mm}" Width="150"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </materialDesign:Card>
+    </DockPanel>
+</UserControl>

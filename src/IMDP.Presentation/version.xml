@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<item>
+  <version>1.0.1</version>
+  <url>/Package/IMDP_V1.0.1.zip</url>
+  <changelog>• 修复了部分bug</changelog>
+  <releaseDate>2026-08-06 10:30:47</releaseDate>
+  <mandatory>false</mandatory>
+  <history>
+    <item>
+      <version>1.0.0</version>
+      <url>/Package/IMDP_V1.0.0.zip</url>
+      <changelog>• 初始版本</changelog>
+      <releaseDate>2026-08-06 09:30:47</releaseDate>
+    </item>
+  </history>
+</item>

@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>IMDP.Presentation</RootNamespace>
+    <AssemblyName>IMDP</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon />
+    <StartupObject />
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Prism.DryIoc" Version="9.0.537" />
+    <PackageReference Include="MaterialDesignThemes" Version="5.2.0" />
+    <PackageReference Include="MaterialDesignColors" Version="5.3.2" />
+    <PackageReference Include="NLog" Version="5.3.4" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Autoupdater.NET.Official" Version="1.9.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\IMDP.Domain\IMDP.Domain.csproj" />
+    <ProjectReference Include="..\IMDP.Application\IMDP.Application.csproj" />
+    <ProjectReference Include="..\IMDP.Infrastructure\IMDP.Infrastructure.csproj" />
+    <ProjectReference Include="..\Products\GasDG\IMDP.Products.GasDG.WholeA\IMDP.Products.GasDG.WholeA.csproj">
+      <Private>true</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Products\WaterDW\IMDP.Products.WaterDW.ProductA\IMDP.Products.WaterDW.ProductA.csproj">
+      <Private>true</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Products\GasOG\IMDP.Products.GasOG.ProductA\IMDP.Products.GasOG.ProductA.csproj">
+      <Private>true</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Products\WaterOW\IMDP.Products.WaterOW.ProductA\IMDP.Products.WaterOW.ProductA.csproj">
+      <Private>true</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Products\GasDG\IMDP.Products.GasDG.BoardA\IMDP.Products.GasDG.BoardA.csproj">
+      <Private>true</Private>
+    </ProjectReference>
+    <ProjectReference Include="..\Products\GasDG\IMDP.Products.GasDG.LaserDetector\IMDP.Products.GasDG.LaserDetector.csproj">
+      <Private>true</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="nlog.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="version.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

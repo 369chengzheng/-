@@ -1,0 +1,797 @@
+<UserControl
+    x:Class="IMDP.Products.GasDG.LaserDetector.Views.LaserDetectorView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="clr-namespace:IMDP.Products.GasDG.LaserDetector.Models"
+    xmlns:prism="http://prismlibrary.com/"
+    xmlns:viewmodels="clr-namespace:IMDP.Products.GasDG.LaserDetector.ViewModels"
+    d:DataContext="{d:DesignInstance Type=viewmodels:LaserDetectorViewModel}"
+    d:DesignHeight="900"
+    d:DesignWidth="1920"
+    prism:ViewModelLocator.AutoWireViewModel="True"
+    Background="White"
+    FontFamily="{DynamicResource MaterialDesignFont}"
+    mc:Ignorable="d">
+    <UserControl.Resources>
+        <!--  隐式样式：文本左对齐垂直居中  -->
+        <Style TargetType="TextBlock">
+            <Setter Property="TextAlignment" Value="Left" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <!--  输入框统一使用 MaterialDesign 浮动提示样式  -->
+        <Style BasedOn="{StaticResource MaterialDesignFloatingHintTextBox}" TargetType="TextBox">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextAlignment" Value="Center" />
+        </Style>
+        <!--  下拉框统一使用 MaterialDesign 浮动提示样式  -->
+        <Style BasedOn="{StaticResource MaterialDesignFloatingHintComboBox}" TargetType="ComboBox">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!--  测试方式下拉选项（有源/无源共用）  -->
+        <x:Array x:Key="TestModeOptions" Type="models:ConfigModeOption">
+            <models:ConfigModeOption Display="01-仅测试输出功能" Value="01" />
+            <models:ConfigModeOption Display="02-测试输入和输出功能" Value="02" />
+        </x:Array>
+    </UserControl.Resources>
+
+    <!--  整体 Grid + 外层滚动条 + Ctrl+滚轮缩放  -->
+    <ScrollViewer
+        x:Name="RootScrollViewer"
+        HorizontalScrollBarVisibility="Auto"
+        VerticalScrollBarVisibility="Auto">
+        <Grid Margin="10">
+            <Grid.LayoutTransform>
+                <ScaleTransform x:Name="ScaleTransform" ScaleX="1" ScaleY="1" />
+            </Grid.LayoutTransform>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" MinHeight="60" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" MinHeight="240" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!--  Row0 左：面包屑  -->
+            <StackPanel
+                Grid.Row="0"
+                VerticalAlignment="Center"
+                Orientation="Horizontal">
+                <Button
+                    Width="90"
+                    BorderThickness="0"
+                    Command="{Binding GoHomeCommand}">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <TextBlock
+                                x:Name="ContextText"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Foreground="Black"
+                                Text="首页-&gt;" />
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="ContextText" Property="Foreground" Value="Blue" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+                <TextBlock
+                    Margin="-20,0,0,0"
+                    VerticalAlignment="Center"
+                    FontSize="15"
+                    Text="激光检测仪方案配置" />
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontSize="15"
+                    Foreground="#666666"
+                    Text="{Binding CurrentMaterialNumber, StringFormat='  ({0})'}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding CurrentMaterialNumber}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
+
+            <!--  Row0 右：三色操作按钮 + 折叠/展开  -->
+            <StackPanel
+                Grid.Row="0"
+                Margin="0,0,0,10"
+                HorizontalAlignment="Right"
+                Orientation="Horizontal">
+                <Button
+                    Width="90"
+                    Height="40"
+                    Margin="5,0"
+                    Command="{Binding QueryCommand}"
+                    Content="查询"
+                    Style="{StaticResource SemanticQueryButtonStyle}" />
+                <Button
+                    Width="90"
+                    Height="40"
+                    Margin="5,0"
+                    Command="{Binding SaveCommand}"
+                    Content="维护"
+                    Style="{StaticResource SemanticSuccessButtonStyle}" />
+                <Button
+                    Width="90"
+                    Height="40"
+                    Margin="5,0"
+                    Command="{Binding DeleteCommand}"
+                    Content="删除"
+                    Style="{StaticResource SemanticDangerButtonStyle}" />
+                <Button
+                    x:Name="ButtonCloseMenu"
+                    Width="90"
+                    Height="40"
+                    Margin="5,0"
+                    Click="ButtonCloseMenu_Click">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border
+                                x:Name="Bd"
+                                Background="#05b790"
+                                CornerRadius="10">
+                                <materialDesign:PackIcon
+                                    Width="25"
+                                    Height="25"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Foreground="White"
+                                    Kind="ArrowUp" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Opacity" Value="0.88" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+                <Button
+                    x:Name="ButtonOpenMenu"
+                    Width="90"
+                    Height="40"
+                    Margin="5,0"
+                    Click="ButtonOpenMenu_Click"
+                    Visibility="Collapsed">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border
+                                x:Name="Bd"
+                                Background="#05b790"
+                                CornerRadius="10">
+                                <materialDesign:PackIcon
+                                    Width="25"
+                                    Height="25"
+                                    Foreground="White"
+                                    Kind="ArrowDown" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Opacity" Value="0.88" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+            </StackPanel>
+
+            <!--  Row1：参数配置折叠面板（整体 Grid；每项 = 名称+MES码+内容 水平 StackPanel）  -->
+            <Border
+                x:Name="GridMenu"
+                Grid.Row="1"
+                Height="470"
+                Padding="10,0,10,0"
+                BorderBrush="#22409EFE"
+                BorderThickness="1"
+                CornerRadius="10">
+                <Grid ShowGridLines="False">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="20" />
+                        <ColumnDefinition Width="1*" MinWidth="330" />
+                        <ColumnDefinition Width="30" />
+                        <ColumnDefinition Width="1*" MinWidth="330" />
+                        <ColumnDefinition Width="30" />
+                        <ColumnDefinition Width="1*" MinWidth="330" />
+                        <ColumnDefinition Width="20" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="55" />
+                        <RowDefinition Height="55" />
+                        <RowDefinition Height="55" />
+                        <RowDefinition Height="55" />
+                        <RowDefinition Height="55" />
+                        <RowDefinition Height="55" />
+                        <RowDefinition Height="55" />
+                        <RowDefinition Height="55" />
+                    </Grid.RowDefinitions>
+
+                    <!--  Row0：产品编码 | 工位数量 |（空）  -->
+                    <StackPanel
+                        Grid.Row="0"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <TextBlock Margin="0,0,8,0" Text="产品编码:" />
+                        <TextBox Width="200" Text="{Binding ProductCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="0"
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <TextBlock Margin="0,0,8,0" Text="工位数量:" />
+                        <TextBox Width="70" Text="{Binding StationCount, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <!--  Row1：12V电压 | 8V电压 | 3.8V电压  -->
+                    <StackPanel
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="12V电压:"
+                            IsChecked="{Binding Parameters[0].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[0].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox
+                            Width="70"
+                            Margin="0,0,4,0"
+                            materialDesign:HintAssist.Hint="下限"
+                            Text="{Binding Parameters[0].Parameters[1].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Margin="0,0,4,0" Text="~" />
+                        <TextBox
+                            Width="70"
+                            materialDesign:HintAssist.Hint="上限"
+                            Text="{Binding Parameters[0].Parameters[2].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="1"
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="8V电压:"
+                            IsChecked="{Binding Parameters[1].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[1].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox
+                            Width="70"
+                            Margin="0,0,4,0"
+                            materialDesign:HintAssist.Hint="下限"
+                            Text="{Binding Parameters[1].Parameters[1].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Margin="0,0,4,0" Text="~" />
+                        <TextBox
+                            Width="70"
+                            materialDesign:HintAssist.Hint="上限"
+                            Text="{Binding Parameters[1].Parameters[2].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="1"
+                        Grid.Column="5"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="3.8V电压:"
+                            IsChecked="{Binding Parameters[4].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[4].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox
+                            Width="70"
+                            Margin="0,0,4,0"
+                            materialDesign:HintAssist.Hint="下限"
+                            Text="{Binding Parameters[4].Parameters[1].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Margin="0,0,4,0" Text="~" />
+                        <TextBox
+                            Width="70"
+                            materialDesign:HintAssist.Hint="上限"
+                            Text="{Binding Parameters[4].Parameters[2].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <!--  Row2：主电5V | 甲烷5V | 3.3V电压  -->
+                    <StackPanel
+                        Grid.Row="2"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="主电5V电压:"
+                            IsChecked="{Binding Parameters[2].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[2].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox
+                            Width="70"
+                            Margin="0,0,4,0"
+                            materialDesign:HintAssist.Hint="下限"
+                            Text="{Binding Parameters[2].Parameters[1].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Margin="0,0,4,0" Text="~" />
+                        <TextBox
+                            Width="70"
+                            materialDesign:HintAssist.Hint="上限"
+                            Text="{Binding Parameters[2].Parameters[2].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="2"
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="甲烷5V电压:"
+                            IsChecked="{Binding Parameters[3].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[3].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox
+                            Width="70"
+                            Margin="0,0,4,0"
+                            materialDesign:HintAssist.Hint="下限"
+                            Text="{Binding Parameters[3].Parameters[1].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Margin="0,0,4,0" Text="~" />
+                        <TextBox
+                            Width="70"
+                            materialDesign:HintAssist.Hint="上限"
+                            Text="{Binding Parameters[3].Parameters[2].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="2"
+                        Grid.Column="5"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="3.3V电压:"
+                            IsChecked="{Binding Parameters[5].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[5].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox
+                            Width="70"
+                            Margin="0,0,4,0"
+                            materialDesign:HintAssist.Hint="下限"
+                            Text="{Binding Parameters[5].Parameters[1].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Margin="0,0,4,0" Text="~" />
+                        <TextBox
+                            Width="70"
+                            materialDesign:HintAssist.Hint="上限"
+                            Text="{Binding Parameters[5].Parameters[2].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <!--  Row3：功耗 | 信号强度 | 有源测试  -->
+                    <StackPanel
+                        Grid.Row="3"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="功耗检测:"
+                            IsChecked="{Binding Parameters[6].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[6].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox
+                            Width="70"
+                            Margin="0,0,4,0"
+                            materialDesign:HintAssist.Hint="下限"
+                            Text="{Binding Parameters[6].Parameters[1].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Margin="0,0,4,0" Text="~" />
+                        <TextBox
+                            Width="70"
+                            materialDesign:HintAssist.Hint="上限"
+                            Text="{Binding Parameters[6].Parameters[2].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="3"
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="信号强度:"
+                            IsChecked="{Binding Parameters[7].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[7].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox
+                            Width="70"
+                            Margin="0,0,4,0"
+                            materialDesign:HintAssist.Hint="下限"
+                            Text="{Binding Parameters[7].Parameters[1].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Margin="0,0,4,0" Text="~" />
+                        <TextBox
+                            Width="70"
+                            materialDesign:HintAssist.Hint="上限"
+                            Text="{Binding Parameters[7].Parameters[2].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="3"
+                        Grid.Column="5"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="有源测试:"
+                            IsChecked="{Binding Parameters[16].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[16].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <ComboBox
+                            Width="190"
+                            DisplayMemberPath="Display"
+                            ItemsSource="{StaticResource TestModeOptions}"
+                            SelectedValue="{Binding Parameters[16].Parameters[0].Value, Mode=TwoWay}"
+                            SelectedValuePath="Value" />
+                    </StackPanel>
+
+                    <!--  Row4：无源测试 | 版本号 | 编译时间  -->
+                    <StackPanel
+                        Grid.Row="4"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="无源测试:"
+                            IsChecked="{Binding Parameters[15].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[15].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <ComboBox
+                            Width="190"
+                            DisplayMemberPath="Display"
+                            ItemsSource="{StaticResource TestModeOptions}"
+                            SelectedValue="{Binding Parameters[15].Parameters[0].Value, Mode=TwoWay}"
+                            SelectedValuePath="Value" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="4"
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="版本号:"
+                            IsChecked="{Binding Parameters[17].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[17].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox
+                            Width="130"
+                            materialDesign:HintAssist.Hint="如 1.0.1"
+                            Text="{Binding Parameters[17].Parameters[0].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="4"
+                        Grid.Column="5"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="编译时间:"
+                            IsChecked="{Binding Parameters[18].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="80"
+                            Margin="0,0,8,0"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[18].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBox
+                            Width="140"
+                            materialDesign:HintAssist.Hint="yyMMddHHmmss"
+                            Text="{Binding Parameters[18].Parameters[0].Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <!--  Row5：IMEI | IMSI | ICCID（状态项：名称 + MES码）  -->
+                    <StackPanel
+                        Grid.Row="5"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="IMEI读取:"
+                            IsChecked="{Binding Parameters[8].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="110"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[8].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="5"
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="IMSI读取:"
+                            IsChecked="{Binding Parameters[9].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="110"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[9].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="5"
+                        Grid.Column="5"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="ICCID读取:"
+                            IsChecked="{Binding Parameters[10].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="110"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[10].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <!--  Row6：Flash | 蓝牙 | 星闪  -->
+                    <StackPanel
+                        Grid.Row="6"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="Flash检测:"
+                            IsChecked="{Binding Parameters[11].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="110"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[11].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="6"
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="蓝牙检测:"
+                            IsChecked="{Binding Parameters[12].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="110"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[12].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                    <StackPanel
+                        Grid.Row="6"
+                        Grid.Column="5"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="星闪检测:"
+                            IsChecked="{Binding Parameters[13].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="110"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[13].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <!--  Row7：甲烷传感器  -->
+                    <StackPanel
+                        Grid.Row="7"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <CheckBox
+                            Margin="0,0,8,0"
+                            Content="甲烷传感器:"
+                            IsChecked="{Binding Parameters[14].IsEnabled, Mode=TwoWay}" />
+                        <TextBox
+                            Width="110"
+                            materialDesign:HintAssist.Hint="MES码"
+                            Text="{Binding Parameters[14].MesCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!--  Row2：方案列表  -->
+            <Border
+                Grid.Row="2"
+                Margin="0,10,0,0"
+                Padding="10,0,10,0"
+                BorderBrush="#22409EFE"
+                BorderThickness="1"
+                CornerRadius="10">
+                <DataGrid
+                    AutoGenerateColumns="False"
+                    CanUserAddRows="False"
+                    HeadersVisibility="Column"
+                    IsReadOnly="True"
+                    ItemsSource="{Binding Plans}"
+                    SelectedItem="{Binding SelectedPlan}"
+                    Style="{StaticResource ManagementDataGridStyle}">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn
+                            Width="110"
+                            Binding="{Binding ProductCode}"
+                            Header="产品编码" />
+                        <DataGridTextColumn
+                            Width="50"
+                            Binding="{Binding StationCount}"
+                            Header="工位" />
+                        <DataGridTextColumn Width="100" Header="12V电压">
+                            <DataGridTextColumn.Binding>
+                                <MultiBinding StringFormat="{}{0}~{1}">
+                                    <Binding Path="Parameters[0].Parameters[1].Value" />
+                                    <Binding Path="Parameters[0].Parameters[2].Value" />
+                                </MultiBinding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Width="100" Header="8V电压">
+                            <DataGridTextColumn.Binding>
+                                <MultiBinding StringFormat="{}{0}~{1}">
+                                    <Binding Path="Parameters[1].Parameters[1].Value" />
+                                    <Binding Path="Parameters[1].Parameters[2].Value" />
+                                </MultiBinding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Width="100" Header="主电5V电压">
+                            <DataGridTextColumn.Binding>
+                                <MultiBinding StringFormat="{}{0}~{1}">
+                                    <Binding Path="Parameters[2].Parameters[1].Value" />
+                                    <Binding Path="Parameters[2].Parameters[2].Value" />
+                                </MultiBinding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Width="100" Header="甲烷5V电压">
+                            <DataGridTextColumn.Binding>
+                                <MultiBinding StringFormat="{}{0}~{1}">
+                                    <Binding Path="Parameters[3].Parameters[1].Value" />
+                                    <Binding Path="Parameters[3].Parameters[2].Value" />
+                                </MultiBinding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Width="90" Header="3.8V电压">
+                            <DataGridTextColumn.Binding>
+                                <MultiBinding StringFormat="{}{0}~{1}">
+                                    <Binding Path="Parameters[4].Parameters[1].Value" />
+                                    <Binding Path="Parameters[4].Parameters[2].Value" />
+                                </MultiBinding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Width="90" Header="3.3V电压">
+                            <DataGridTextColumn.Binding>
+                                <MultiBinding StringFormat="{}{0}~{1}">
+                                    <Binding Path="Parameters[5].Parameters[1].Value" />
+                                    <Binding Path="Parameters[5].Parameters[2].Value" />
+                                </MultiBinding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Width="90" Header="功耗">
+                            <DataGridTextColumn.Binding>
+                                <MultiBinding StringFormat="{}{0}~{1}">
+                                    <Binding Path="Parameters[6].Parameters[1].Value" />
+                                    <Binding Path="Parameters[6].Parameters[2].Value" />
+                                </MultiBinding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn Width="90" Header="信号强度">
+                            <DataGridTextColumn.Binding>
+                                <MultiBinding StringFormat="{}{0}~{1}">
+                                    <Binding Path="Parameters[7].Parameters[1].Value" />
+                                    <Binding Path="Parameters[7].Parameters[2].Value" />
+                                </MultiBinding>
+                            </DataGridTextColumn.Binding>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn
+                            Width="70"
+                            Binding="{Binding Parameters[16].Parameters[0].Value}"
+                            Header="有源" />
+                        <DataGridTextColumn
+                            Width="70"
+                            Binding="{Binding Parameters[15].Parameters[0].Value}"
+                            Header="无源" />
+                        <DataGridTextColumn
+                            Width="80"
+                            Binding="{Binding Parameters[17].Parameters[0].Value}"
+                            Header="版本号" />
+                        <DataGridTextColumn
+                            Width="130"
+                            Binding="{Binding Parameters[18].Parameters[0].Value}"
+                            Header="编译时间" />
+                        <DataGridTextColumn
+                            Width="90"
+                            Binding="{Binding CreatedBy}"
+                            Header="创建人" />
+                        <DataGridTextColumn
+                            Width="150"
+                            Binding="{Binding CreatedTime, StringFormat=yyyy-MM-dd HH:mm}"
+                            Header="创建时间" />
+                        <DataGridTextColumn
+                            Width="90"
+                            Binding="{Binding UpdatedBy}"
+                            Header="更新人" />
+                        <DataGridTextColumn
+                            Width="150"
+                            Binding="{Binding UpdatedTime, StringFormat=yyyy-MM-dd HH:mm}"
+                            Header="更新时间" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+
+            <!--  Row3：分页栏  -->
+            <StackPanel
+                Grid.Row="3"
+                Margin="0,12,0,0"
+                HorizontalAlignment="Right"
+                Orientation="Horizontal">
+                <TextBlock Margin="0,0,12,0" VerticalAlignment="Center">
+                    <Run Text="共 " /><Run Text="{Binding TotalCount}" /><Run Text=" 条   " />
+                    <Run Text="{Binding TotalPages, Mode=OneWay}" /><Run Text=" 页   第 " />
+                    <Run Text="{Binding PageIndex}" /><Run Text=" 页" />
+                </TextBlock>
+                <Button
+                    Command="{Binding FirstPageCommand}"
+                    Content="首页"
+                    Style="{StaticResource PaginationButtonStyle}" />
+                <Button
+                    Command="{Binding PreviousPageCommand}"
+                    Content="上一页"
+                    Style="{StaticResource PaginationButtonStyle}" />
+                <Button
+                    Command="{Binding NextPageCommand}"
+                    Content="下一页"
+                    Style="{StaticResource PaginationButtonStyle}" />
+                <Button
+                    Command="{Binding LastPageCommand}"
+                    Content="末页"
+                    Style="{StaticResource PaginationButtonStyle}" />
+                <ComboBox
+                    Width="60"
+                    Height="28"
+                    Margin="8,0,0,0"
+                    VerticalContentAlignment="Center"
+                    ItemsSource="{Binding PageSizeOptions}"
+                    SelectedItem="{Binding PageSize}" />
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>
