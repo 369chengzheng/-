@@ -31,6 +31,7 @@ public partial class MaterialProductMapViewModel : PaginationViewModelBase<Mater
     private readonly IProductPluginRegistry _pluginRegistry;
     private readonly ICurrentContext _currentContext;
     private readonly IMessageService _messageService;
+    private readonly SemaphoreSlim _databaseOperationGate = new(1, 1);
 
     // 当前登录用户工号（用于审计字段）
     private string _currentWorkNumber = string.Empty;
@@ -79,9 +80,9 @@ public partial class MaterialProductMapViewModel : PaginationViewModelBase<Mater
         _currentContext = currentContext;
 
         //重置到首页后按物料号关键字查询
-        QueryCommand = new AsyncRelayCommand(ResetToFirstPageAndRefreshAsync);
-        MaintainCommand = new RelayCommand(OnMaintain);
-        DeleteCommand = new RelayCommand(OnDelete);
+        QueryCommand = new AsyncRelayCommand(ResetToFirstPageAndRefreshAsync, CanExecuteDatabaseOperation);
+        MaintainCommand = new AsyncRelayCommand(() => RunDatabaseOperationAsync(OnMaintainAsync, true), CanExecuteDatabaseOperation);
+        DeleteCommand = new AsyncRelayCommand(() => RunDatabaseOperationAsync(OnDeleteAsync, true), CanExecuteDatabaseOperation);
 
         //此时登陆广播早已结束，订阅不到登陆事件，改用调用已经保存好的 ICurrentContext.UserNam
         // 订阅登录事件，保存当前工号供审计字段使用
@@ -124,7 +125,10 @@ public partial class MaterialProductMapViewModel : PaginationViewModelBase<Mater
     /// <summary>
     /// 执行查询：按物料号关键字分页拉取记录并转为 DTO
     /// </summary>
-    public override async Task RefreshAsync()
+    public override Task RefreshAsync() => RunDatabaseOperationAsync(RefreshCoreAsync);
+
+    // 维护和删除已持有执行锁，刷新列表时直接调用核心方法，避免重复获取同一把锁。
+    private async Task RefreshCoreAsync()
     {
         var result = await _mapRepository.GetPagedAsync(MaterialNumberKeyword ?? string.Empty, PageIndex, PageSize);
 
@@ -137,10 +141,47 @@ public partial class MaterialProductMapViewModel : PaginationViewModelBase<Mater
         TotalCount = result.TotalCount;
     }
 
+    private bool CanExecuteDatabaseOperation() => _databaseOperationGate.CurrentCount > 0;
+
+    /// <summary>本页数据库操作串行执行；重复写入直接忽略，分页刷新等待前一次操作完成。</summary>
+    private async Task RunDatabaseOperationAsync(Func<Task> operation, bool skipIfBusy = false)
+    {
+        if (skipIfBusy)
+        {
+            if (!await _databaseOperationGate.WaitAsync(0)) return;
+        }
+        else
+        {
+            await _databaseOperationGate.WaitAsync();
+        }
+
+        try
+        {
+            NotifyDatabaseCommands();
+            await operation();
+        }
+        catch (Exception ex)
+        {
+            _messageService.ShowError($"物料操作失败：{ex.Message}", "错误");
+        }
+        finally
+        {
+            _databaseOperationGate.Release();
+            NotifyDatabaseCommands();
+        }
+    }
+
+    private void NotifyDatabaseCommands()
+    {
+        QueryCommand.NotifyCanExecuteChanged();
+        MaintainCommand.NotifyCanExecuteChanged();
+        DeleteCommand.NotifyCanExecuteChanged();
+    }
+
     /// <summary>
     /// 维护：未选中记录时新增（提示输入软件物料号），已选中时保存当前勾选的插件配置。
     /// </summary>
-    private async void OnMaintain()
+    private async Task OnMaintainAsync()
     {
         // 收集当前所有勾选的插件 ProductKey 并序列化为 JSON
         var selectedKeys = PluginGroups.SelectMany(g => g.Items).Where(i => i.IsChecked).Select(i => i.ProductKey).ToList();
@@ -193,13 +234,13 @@ public partial class MaterialProductMapViewModel : PaginationViewModelBase<Mater
             _messageService.ShowInfo("修改成功", "提示");
         }
 
-        await RefreshAsync();
+        await RefreshCoreAsync();
     }
 
     /// <summary>
     /// 删除选中记录（软删除：置 <see cref="MaterialProductMap.IsDeleted"/> 为 true）
     /// </summary>
-    private async void OnDelete()
+    private async Task OnDeleteAsync()
     {
         if (SelectedMap == null)
         {
@@ -224,7 +265,7 @@ public partial class MaterialProductMapViewModel : PaginationViewModelBase<Mater
 
         _messageService.ShowInfo("删除成功", "提示");
         SelectedMap = null;
-        await RefreshAsync();
+        await RefreshCoreAsync();
     }
 
     /// <summary>

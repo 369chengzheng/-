@@ -11,7 +11,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Prism.Events;
 using IMDP.Application.Services;
-using IMDP.Application.Events;
 using IMDP.Application.DTOs;
 using System.Collections.ObjectModel;
 using IMDP.Application.Users;
@@ -24,12 +23,13 @@ namespace IMDP.Presentation.ViewModels;
 /// 用户管理视图模型
 /// <para>调用 <see cref="IUserService"/> 分页查询/创建/更新/删除用户；
 /// 角色筛选与姓名二次过滤在客户端执行（服务接口仅支持单个关键字）。</para>
-/// <para>订阅 <see cref="UserLoggedInEvent"/> 获取当前工号，用于禁止删除自身账号与填充审计字段。</para>
+/// <para>从当前用户上下文读取登录工号，禁止删除自身账号。</para>
 /// </summary>
 public partial class UserManageViewModel : PaginationViewModelBase<UserDto>
 {
     private readonly IUserService _userService;
     private readonly ICurrentContext _currentContext;
+    private readonly SemaphoreSlim _databaseOperationGate = new(1, 1);
 
     /// <summary>用户列表（当前页）</summary>
     [ObservableProperty]
@@ -50,9 +50,6 @@ public partial class UserManageViewModel : PaginationViewModelBase<UserDto>
     // 查询条件：角色筛选（"全部" 表示不筛选）
     [ObservableProperty]
     private string _selectedRole = "全部";
-
-    // 当前登录用户工号（删除时用于禁止删除自己）
-    private string _currentWorkNumber = string.Empty;
 
     /// <summary>角色筛选可选项（含"全部"）</summary>
     public List<string> RoleOptions { get; } = new[] { "全部" }
@@ -79,14 +76,10 @@ public partial class UserManageViewModel : PaginationViewModelBase<UserDto>
         _messageService = messageService;
         _userService = userService;
         _currentContext = currentContext;
-        QueryCommand = new AsyncRelayCommand(OnQueryAsync);
-        MaintainCommand = new AsyncRelayCommand(OnMaintainAsync);
-        DeleteCommand = new AsyncRelayCommand(OnDeleteAsync);
-        ResetPasswordCommand = new AsyncRelayCommand(OnResetPasswordAsync);
-
-        eventAggregator.GetEvent<UserLoggedInEvent>().Subscribe(
-            payload => _currentWorkNumber = payload.WorkNumber,
-            ThreadOption.UIThread);
+        QueryCommand = new AsyncRelayCommand(OnQueryAsync, CanExecuteDatabaseOperation);
+        MaintainCommand = new AsyncRelayCommand(() => RunDatabaseOperationAsync(OnMaintainAsync, true), CanExecuteDatabaseOperation);
+        DeleteCommand = new AsyncRelayCommand(() => RunDatabaseOperationAsync(OnDeleteAsync, true), CanExecuteDatabaseOperation);
+        ResetPasswordCommand = new AsyncRelayCommand(() => RunDatabaseOperationAsync(OnResetPasswordAsync, true), CanExecuteDatabaseOperation);
     }
 
 
@@ -95,7 +88,10 @@ public partial class UserManageViewModel : PaginationViewModelBase<UserDto>
     /// <para>服务接口仅支持单个关键字（工号或姓名模糊匹配），优先用工号作为关键字；
     /// 工号与姓名同时填写时，姓名在客户端二次过滤；角色筛选也在客户端执行。</para>
     /// </summary>
-    public override async Task RefreshAsync()
+    public override Task RefreshAsync() => RunDatabaseOperationAsync(RefreshCoreAsync);
+
+    // 维护和删除后的刷新已在执行锁内，直接调用核心方法，避免重复获取同一把锁。
+    private async Task RefreshCoreAsync()
     {
         try
         {
@@ -122,16 +118,50 @@ public partial class UserManageViewModel : PaginationViewModelBase<UserDto>
         }
     }
 
-    private async Task OnQueryAsync()
+    private bool CanExecuteDatabaseOperation() => _databaseOperationGate.CurrentCount > 0;
+
+    /// <summary>本页数据库操作互斥；重复写入直接忽略，自动刷新等待完成。</summary>
+    private async Task RunDatabaseOperationAsync(Func<Task> operation, bool skipIfBusy = false)
     {
-        if (PageIndex != 1)
+        if (skipIfBusy)
         {
-            PageIndex = 1;
-            return;
+            if (!await _databaseOperationGate.WaitAsync(0)) return;
+        }
+        else
+        {
+            await _databaseOperationGate.WaitAsync();
         }
 
-        await RefreshAsync();
+        try
+        {
+            NotifyDatabaseCommands();
+            await operation();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _messageService.ShowWarning("当前角色无权执行用户管理操作", "权限不足");
+        }
+        catch (Exception ex)
+        {
+            // 也覆盖维护流程在原 try 之前读取用户信息时的异常。
+            _messageService.ShowError($"用户管理操作失败：{ex.Message}", "错误");
+        }
+        finally
+        {
+            _databaseOperationGate.Release();
+            NotifyDatabaseCommands();
+        }
     }
+
+    private void NotifyDatabaseCommands()
+    {
+        QueryCommand.NotifyCanExecuteChanged();
+        MaintainCommand.NotifyCanExecuteChanged();
+        DeleteCommand.NotifyCanExecuteChanged();
+        ResetPasswordCommand.NotifyCanExecuteChanged();
+    }
+
+    private Task OnQueryAsync() => ResetToFirstPageAndRefreshAsync();
 
     private async Task OnMaintainAsync()
     {
@@ -181,7 +211,7 @@ public partial class UserManageViewModel : PaginationViewModelBase<UserDto>
 
             _messageService.ShowInfo(existing == null ? "新增用户成功" : "修改用户成功");
             SelectedUser = null;
-            await RefreshAsync();
+            await RefreshCoreAsync();
         }
         catch (UnauthorizedAccessException)
         {
@@ -205,7 +235,7 @@ public partial class UserManageViewModel : PaginationViewModelBase<UserDto>
             return;
         }
 
-        if (string.Equals(SelectedUser.WorkNumber, _currentWorkNumber, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(SelectedUser.WorkNumber, _currentContext.UserName, StringComparison.OrdinalIgnoreCase))
         {
             _messageService.ShowWarning("不能删除当前登录用户", "警告");
             return;
@@ -226,7 +256,7 @@ public partial class UserManageViewModel : PaginationViewModelBase<UserDto>
 
             _messageService.ShowInfo("删除用户成功", "提示");
             SelectedUser = null;
-            await RefreshAsync();
+            await RefreshCoreAsync();
         }
         catch (UnauthorizedAccessException)
         {

@@ -198,6 +198,127 @@ namespace IMDP.Products.GasDG.LaserDetector.Models
             return item.TestMode != "00";
         }
 
+        /// <summary>
+        /// 根据当前配置生成页面需要展示的全部自动测试结果项
+        /// <para>按协议字段顺序排列，每项含名称、展示值与红绿判定；
+        /// 未启用的配置项不出现在结果列表中。</para>
+        /// </summary>
+        /// <param name="config">当前产品的激光检测配置</param>
+        /// <returns>按协议字段顺序排列的结果展示项列表</returns>
+        public IReadOnlyList<LaserDetectorResultDisplayItem> CreatePropertyItems(LaserDetectorConfig config)
+        {
+            var items = new List<LaserDetectorResultDisplayItem>();
+            foreach (var item in config.Items)
+            {
+                if (!item.IsEnabled)
+                {
+                    continue;
+                }
+
+                var displayItem = CreateDisplayItem(item);
+                if (displayItem != null)
+                {
+                    items.Add(displayItem);
+                }
+            }
+
+            return items;
+        }
+
+        /// <summary>
+        /// 为单个启用配置项生成结果展示项（含红绿判定）
+        /// </summary>
+        /// <param name="item">已启用的配置项</param>
+        /// <returns>展示项；该项无对应协议数据时返回 null</returns>
+        private LaserDetectorResultDisplayItem? CreateDisplayItem(LaserDetectorConfigItem item)
+        {
+            string value = item.Code switch
+            {
+                LaserDetectorItemCodes.Voltage12V => $"{Voltage12V:0.###} V",
+                LaserDetectorItemCodes.Voltage8V => $"{Voltage8V:0.###} V",
+                LaserDetectorItemCodes.MainVoltage5V => $"{MainVoltage5V:0.###} V",
+                LaserDetectorItemCodes.MethaneVoltage5V => $"{MethaneVoltage5V:0.###} V",
+                LaserDetectorItemCodes.Voltage3V8 => $"{Voltage3V8:0.###} V",
+                LaserDetectorItemCodes.Voltage3V3 => $"{Voltage3V3:0.###} V",
+                LaserDetectorItemCodes.PowerConsumption => PowerConsumption.ToString("0.0"),
+                LaserDetectorItemCodes.Imei => Imei,
+                LaserDetectorItemCodes.Imsi => Imsi,
+                LaserDetectorItemCodes.Iccid => Iccid,
+                LaserDetectorItemCodes.SignalStrength => SignalStrength.ToString(),
+                LaserDetectorItemCodes.Flash => GetNormalStatus(FlashStatus),
+                LaserDetectorItemCodes.Bluetooth or LaserDetectorItemCodes.StarFlash => GetWirelessStatus(),
+                LaserDetectorItemCodes.MethaneSensor => GetNormalStatus(MethaneSensorStatus),
+                LaserDetectorItemCodes.PassiveTest => GetNormalStatus(PassiveTestStatus),
+                LaserDetectorItemCodes.ActiveTest => GetNormalStatus(ActiveTestStatus),
+                LaserDetectorItemCodes.ProgramVersion => ProgramVersion,
+                LaserDetectorItemCodes.CompilationTime => CompilationTimeDisplay,
+                _ => string.Empty
+            };
+
+            if (value == string.Empty)
+            {
+                return null;
+            }
+
+            // 按该项配置判定红绿：通过为绿，未通过为红
+            bool isPassed = IsItemPassed(item);
+            return new LaserDetectorResultDisplayItem(item.Name, value, isPassed);
+        }
+
+        /// <summary>
+        /// 将状态检测值转换为展示文本
+        /// </summary>
+        /// <param name="value">协议状态字节</param>
+        /// <returns>0x01 时返回"正常"，否则返回"异常"</returns>
+        private static string GetNormalStatus(byte value)
+        {
+            return value == 0x01 ? "正常" : "异常";
+        }
+
+        /// <summary>
+        /// 将蓝牙/星闪检测值转换为展示文本
+        /// </summary>
+        /// <returns>异常/蓝牙/星闪/未知状态文本</returns>
+        private string GetWirelessStatus()
+        {
+            return BluetoothStarFlashStatus switch
+            {
+                0x00 => "异常",
+                0x01 => "蓝牙",
+                0x02 => "星闪",
+                _ => $"未知({BluetoothStarFlashStatus})"
+            };
+        }
+
         #endregion
+    }
+
+    /// <summary>
+    /// 自动测试结果展示项
+    /// <para>承载单个检测项在工位"自动测试结果"列表中的名称、实测值与红绿判定。</para>
+    /// </summary>
+    public sealed class LaserDetectorResultDisplayItem
+    {
+        /// <summary>
+        /// 构造函数
+        /// </summary>
+        /// <param name="name">检测项名称</param>
+        /// <param name="value">实测值展示文本</param>
+        /// <param name="isPassed">该项是否判定通过</param>
+        public LaserDetectorResultDisplayItem(string name, string value, bool isPassed)
+        {
+            Name = name;
+            Value = value;
+            IsPassed = isPassed;
+        }
+
+        /// <summary>检测项名称</summary>
+        public string Name { get; }
+
+        /// <summary>实测值展示文本</summary>
+        public string Value { get; }
+
+        /// <summary>该项是否判定通过（true=绿色，false=红色）</summary>
+        public bool IsPassed { get; }
     }
 }

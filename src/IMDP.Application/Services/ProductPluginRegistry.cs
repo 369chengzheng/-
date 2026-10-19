@@ -45,6 +45,10 @@ public class ProductPluginRegistry : IProductPluginRegistry
     }
 
     /// <inheritdoc/>
+    public ProductPluginBase? GetRegisteredPlugin(string productKey)
+        => _plugins.TryGetValue(productKey, out var plugin) ? plugin : null;
+
+    /// <inheritdoc/>
     public IReadOnlyList<ProductPluginDto> GetAllPlugins()
     {
         return _plugins.Values.Select(p => new ProductPluginDto

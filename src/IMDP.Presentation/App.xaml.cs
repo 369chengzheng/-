@@ -157,10 +157,10 @@ public partial class App : PrismApplication
 
     /// <summary>
     /// 应用程序初始化完成后的处理
-    /// <para>执行数据库建表与种子数据初始化，将登录视图注册到主内容区域，
-    /// 并根据配置在启动时自动检测新版本（若有则弹出升级更新窗口）。</para>
+    /// <para>立即将登录视图注册到主内容区域（登录界面先渲染），随后后台执行
+    /// 数据库建表与种子数据初始化、version.xml 同步及启动更新检测，不阻塞登录界面。</para>
     /// </summary>
-    protected override async void OnInitialized()
+    protected override void OnInitialized()
     {
         base.OnInitialized();
 
@@ -176,6 +176,23 @@ public partial class App : PrismApplication
         //    _logger.Error(ex, "[MES 测试] GetMaterialNumberAsync 调用异常");
         //}
 
+        // 将登录视图注册到主内容区域，启动后默认显示登录界面。
+        // 先注册登录视图再后台执行数据库初始化/版本同步/更新检测，
+        // 避免数据库或网络缓慢时登录界面迟迟渲染不出来（此前这些 IO 全部排在注册登录视图之前，串行等待）
+        var regionManager = Container.Resolve<IRegionManager>();
+        regionManager.RegisterViewWithRegion("MainContentRegion", typeof(LoginView));
+
+        // 启动后台任务链：数据库初始化 → 版本信息同步 → 启动更新检测（不阻塞登录界面渲染，失败仅记日志）
+        _ = RunStartupTasksAsync();
+    }
+
+    /// <summary>
+    /// 启动后台任务：数据库初始化 → 本地 version.xml 同步 → 启动更新检测。
+    /// <para>各步逐段捕获异常仅记日志，任何一步失败都不影响登录界面使用；
+    /// 数据库尚未就绪期间的登录日志写入由 RecordLoginAsync 自身容错（全 catch 静默返回 0，不阻断登录）。</para>
+    /// </summary>
+    private async Task RunStartupTasksAsync()
+    {
         try
         {
             // 创建数据库表结构并写入种子数据
@@ -192,13 +209,18 @@ public partial class App : PrismApplication
             _logger.Error(ex, "数据库初始化失败");
         }
 
-        // 启动时将代码硬编码中定义的最新版本及更新说明自动写回/更新至本地 version.xml（自动归档旧版本至 history）
-        var updateService = Container.Resolve<IUpdateService>();
-        await updateService.SyncCodeVersionToXmlAsync();
-
-        // 将登录视图注册到主内容区域，启动后默认显示登录界面
-        var regionManager = Container.Resolve<IRegionManager>();
-        regionManager.RegisterViewWithRegion("MainContentRegion", typeof(LoginView));
+        // 启动时将代码硬编码中定义的最新版本及更新说明同步至本地 version.xml（自动归档旧版本至 history）。
+        // 基底按"服务器优先、本地回退"加载：先获取更新服务器上的 version.xml（权威数据源、history 最全），
+        // 服务器没有时回退本地文件，两者均无则全新生成；仅追加更高版本，不降级覆盖。
+        try
+        {
+            var updateService = Container.Resolve<IUpdateService>();
+            await updateService.SyncCodeVersionToXmlAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "版本信息同步至 version.xml 失败");
+        }
 
         // 启动时自动检测新版本（由 appsettings.json Update:CheckOnStartup 控制，默认开启）
         var config = LoadAppConfig();
@@ -206,6 +228,9 @@ public partial class App : PrismApplication
         {
             await CheckForUpdateAsync(showWhenNoUpdate: false);
         }
+
+        // 公共协议工具类自测（仅 DEBUG 编译；延迟 5 秒后台执行，结果写 NLog，不弹窗不阻塞）
+        //_ = CommonServiceSelfTest.RunAfterStartupAsync();
     }
 
     /// <summary>

@@ -33,26 +33,47 @@ public static class FrameComposer
         // 兼容“长度在前、地址/命令位于长度之后”的布局（如 G2-SAGA 的 68|len|工位|命令|数据）。
         int dataStart = ComputeDataStart(format);
 
+        // 唤醒前导总长（如海外二代水表 549×0x55 + 5×0xFE 同步码；不参与长度字段与校验码计算）
+        int preambleLen = (format.Preamble != null && format.PreambleRepeat > 0)
+            ? format.Preamble.Length * format.PreambleRepeat
+            : 0;
+        preambleLen += format.PreambleSuffix?.Length ?? 0;
+
+        // 有效数据区长度：CommandIsPayload 模式下 command 首字节作为命令码写入命令字段，不进数据区
+        int payloadLen = format.CommandIsPayload && command.Length > 0 ? command.Length - 1 : command.Length;
+
         // 计算总长度：帧体长度 = 数据区结束位置（数据区起点 + 数据长度），再补校验码与帧尾
-        int totalLen = dataStart + command.Length;
+        int totalLen = dataStart + payloadLen;
         totalLen += checksumLen;
         if (format.FrameFooter != null) totalLen += format.FrameFooter.Length;
 
-        var frame = new byte[totalLen];
+        var frame = new byte[preambleLen + totalLen];
 
-        // 写入帧头
-        Array.Copy(header, 0, frame, 0, header.Length);
+        // 写入唤醒前导：重复段（549×0x55）+ 尾部同步码（5×0xFE），紧贴帧头之前
+        int preambleRepeatLen = preambleLen - (format.PreambleSuffix?.Length ?? 0);
+        for (int i = 0; i < format.PreambleRepeat; i++)
+        {
+            Array.Copy(format.Preamble, 0, frame, i * format.Preamble.Length, format.Preamble.Length);
+        }
+        if (format.PreambleSuffix != null && format.PreambleSuffix.Length > 0)
+        {
+            Array.Copy(format.PreambleSuffix, 0, frame, preambleRepeatLen, format.PreambleSuffix.Length);
+        }
 
-        // 写入设备地址
+        // 写入帧头（前导之后）
+        Array.Copy(header, 0, frame, preambleLen, header.Length);
+
+        // 写入设备地址（偏移含前导）
         if (format.AddressField != null)
-            WriteField(frame, format.AddressField, deviceAddress);
+            WriteField(frame, WithPreamble(format.AddressField, preambleLen), deviceAddress);
 
-        // 写入命令码：优先使用配置的固定值，否则取 command 首字节（无数据时写 0）
+        // 写入命令码：优先 CommandIsPayload/无固定值时取 command 首字节，其次配置的固定值
         if (format.CommandField != null)
         {
-            byte cmdValue = format.CommandFieldValue
-                ?? (command.Length > 0 ? command[0] : (byte)0);
-            WriteField(frame, format.CommandField, cmdValue);
+            byte cmdValue = format.CommandIsPayload
+                ? (command.Length > 0 ? command[0] : (byte)0)
+                : format.CommandFieldValue ?? (command.Length > 0 ? command[0] : (byte)0);
+            WriteField(frame, WithPreamble(format.CommandField, preambleLen), cmdValue);
         }
 
         // 写入长度字段
@@ -60,30 +81,30 @@ public static class FrameComposer
         {
             int lengthValue = format.LengthFieldMode == LengthFieldMode.TotalFrameLength
                 ? totalLen                                    // 长度字段 = 整帧总长
-                : command.Length;                             // 长度字段 = 数据区长度
-            WriteField(frame, format.LengthField, lengthValue);
+                : payloadLen;                                  // 长度字段 = 数据区长度
+            WriteField(frame, WithPreamble(format.LengthField, preambleLen), lengthValue);
         }
 
-        // 写入数据区
-        if (command.Length > 0)
+        // 写入数据区（CommandIsPayload 模式跳过首字节命令码，从 command[1] 拷入）
+        if (payloadLen > 0)
         {
-            Array.Copy(command, 0, frame, dataStart, command.Length);
+            Array.Copy(command, command.Length - payloadLen, frame, preambleLen + dataStart, payloadLen);
         }
 
-        // 计算并写入校验码（位于数据区之后、帧尾之前）
+        // 计算并写入校验码（位于数据区之后、帧尾之前；数据从帧头起算，不含前导）
         if (format.ChecksumType != ChecksumType.None)
         {
             int bodyLen = totalLen - (format.FrameFooter?.Length ?? 0) - checksumLen;
             var dataToCheck = new byte[bodyLen];
-            Array.Copy(frame, 0, dataToCheck, 0, bodyLen);
+            Array.Copy(frame, preambleLen, dataToCheck, 0, bodyLen);
             var checksum = ChecksumCalculator.Calculate(dataToCheck, format.ChecksumType);
-            Array.Copy(checksum, 0, frame, bodyLen, checksum.Length);
+            Array.Copy(checksum, 0, frame, preambleLen + bodyLen, checksum.Length);
         }
 
         // 写入帧尾
         if (format.FrameFooter != null && format.FrameFooter.Length > 0)
         {
-            Array.Copy(format.FrameFooter, 0, frame, totalLen - format.FrameFooter.Length, format.FrameFooter.Length);
+            Array.Copy(format.FrameFooter, 0, frame, preambleLen + totalLen - format.FrameFooter.Length, format.FrameFooter.Length);
         }
 
         return frame;
@@ -287,6 +308,13 @@ public static class FrameComposer
         return type == ChecksumType.None ? 0 :
             (type == ChecksumType.Crc16Modbus || type == ChecksumType.Crc16Ccitt) ? 2 : 1;
     }
+
+    /// <summary>
+    /// 将字段偏移加上前导长度（供含唤醒前导的帧内字段定位；前导由调用方按需开启）。
+    /// <para>注意：返回的 FieldConfig 仅为写入定位用临时对象，Offset 已含前导偏移。</para>
+    /// </summary>
+    private static FieldConfig WithPreamble(FieldConfig field, int preambleLen)
+        => preambleLen == 0 ? field : new FieldConfig { Offset = field.Offset + preambleLen, Length = field.Length };
 
     /// <summary>
     /// 计算数据区起点（取帧头/地址/命令/长度各固定字段的最大结束位置）

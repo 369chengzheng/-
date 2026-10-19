@@ -35,12 +35,6 @@
     WindowStartupLocation="CenterScreen"
     WindowStyle="None"
     mc:Ignorable="d">
-    <WindowChrome.WindowChrome>
-        <WindowChrome
-            CaptionHeight="56"
-            CornerRadius="0"
-            GlassFrameThickness="0" />
-    </WindowChrome.WindowChrome>
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
@@ -58,7 +52,6 @@
             <Setter Property="Foreground" Value="White" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="FontSize" Value="19" />
-            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="#26FFFFFF" />
@@ -114,11 +107,13 @@
     <Border BorderBrush="{DynamicResource MaterialDesignDivider}" BorderThickness="1">
         <Grid>
             <DockPanel LastChildFill="True">
-                <!--  顶部标题栏  -->
+                <!--  顶部标题栏（按住左键可拖动移动窗口，双击最大化/还原）  -->
                 <Grid
+                    x:Name="TitleBar"
                     Height="56"
                     Background="{StaticResource ImdpShellBrush}"
-                    DockPanel.Dock="Top">
+                    DockPanel.Dock="Top"
+                    MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />

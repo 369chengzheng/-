@@ -2,7 +2,8 @@
     =============================================================================
     文件名：LoginView.xaml
     功能描述：登录视图。提供工位、工号、密码输入及离线登录选项，
-    采用蓝色渐变背景与居中卡片布局，用于用户身份认证。
+    背景为现代化工厂图片 + 径向渐晕聚焦，卡片采用玻璃拟态（半透明深蓝、
+    圆角、柔和投影、白描边高光），颜色与背景图自然过渡，用于用户身份认证。
     =============================================================================
 -->
 <UserControl
@@ -17,22 +18,50 @@
     Background="{DynamicResource MaterialDesignPaper}"
     mc:Ignorable="d">
     <Grid>
-        <!--  背景：蓝色渐变画刷  -->
+        <!--  背景：现代化工厂图片（工程资源 Assets/LoginBackground.jpg，拉伸铺满）  -->
         <Grid.Background>
-            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                <GradientStop Offset="0" Color="#1a237e" />
-                <GradientStop Offset="0.5" Color="#0d47a1" />
-                <GradientStop Offset="1" Color="#1565c0" />
-            </LinearGradientBrush>
+            <ImageBrush
+                AlignmentX="Center"
+                AlignmentY="Center"
+                ImageSource="pack://application:,,,/Assets/LoginBackground.jpg"
+                Stretch="UniformToFill" />
         </Grid.Background>
 
-        <!--  登录卡片：居中显示，包含标题、输入框与按钮  -->
+        <!--  径向渐晕叠加：中心微亮、四周压暗，把视线聚焦到卡片并柔化图片边缘  -->
+        <Border>
+            <Border.Background>
+                <RadialGradientBrush Center="0.5,0.45" GradientOrigin="0.5,0.45" RadiusX="0.78" RadiusY="0.78">
+                    <GradientStop Offset="0" Color="#14284A6B" />
+                    <GradientStop Offset="0.55" Color="#5E0E1B33" />
+                    <GradientStop Offset="1" Color="#C4060F1F" />
+                </RadialGradientBrush>
+            </Border.Background>
+        </Border>
+
+        <!--  登录卡片：玻璃拟态，半透明深蓝渐变融入背景，圆角 24，柔和投影浮起  -->
         <materialDesign:Card
             Width="400"
-            Height="420"
-            Padding="32"
+            Height="440"
+            Padding="36,32"
             HorizontalAlignment="Center"
-            VerticalAlignment="Center">
+            VerticalAlignment="Center"
+            BorderBrush="#59FFFFFF"
+            BorderThickness="1"
+            UniformCornerRadius="24">
+            <materialDesign:Card.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0.65,1">
+                    <GradientStop Offset="0" Color="#661E3A5F" />
+                    <GradientStop Offset="1" Color="#8C14213D" />
+                </LinearGradientBrush>
+            </materialDesign:Card.Background>
+            <materialDesign:Card.Effect>
+                <DropShadowEffect
+                    BlurRadius="36"
+                    Direction="270"
+                    Opacity="0.5"
+                    ShadowDepth="0"
+                    Color="#060F1F" />
+            </materialDesign:Card.Effect>
             <StackPanel>
                 <!--  标题区：系统名称  -->
                 <TextBlock
@@ -40,49 +69,145 @@
                     HorizontalAlignment="Center"
                     FontSize="28"
                     FontWeight="Bold"
-                    Text="智造检测平台" />
+                    Foreground="#F2FFFFFF">
+                    <TextBlock.Effect>
+                        <DropShadowEffect
+                            BlurRadius="10"
+                            Opacity="0.45"
+                            ShadowDepth="1"
+                            Color="#FF000000" />
+                    </TextBlock.Effect>
+                    智造检测平台
+                </TextBlock>
                 <TextBlock
                     Margin="0,0,0,32"
                     HorizontalAlignment="Center"
                     FontSize="14"
-                    Foreground="{DynamicResource MaterialDesignBodyLight}"
-                    Text="IMDP" />
+                    Foreground="#B8D4E8FF">
+                    <TextBlock.Effect>
+                        <DropShadowEffect
+                            BlurRadius="8"
+                            Opacity="0.4"
+                            ShadowDepth="1"
+                            Color="#FF000000" />
+                    </TextBlock.Effect>
+                    IMDP
+                </TextBlock>
 
-                <!--  输入区：工位、工号、密码  -->
+                <!--  输入区：工位、工号、密码（玻璃拟态深色输入框）  -->
                 <TextBox
                     Margin="0,0,0,16"
+                    materialDesign:HintAssist.Foreground="#B3D6EBFF"
                     materialDesign:HintAssist.Hint="工位"
+                    materialDesign:TextFieldAssist.UnderlineBrush="#7FC4FF"
+                    CaretBrush="#FFF6FBFF"
+                    Foreground="#FFF6FBFF"
+                    SelectionBrush="#667FC4FF"
                     Text="{Binding Station, UpdateSourceTrigger=PropertyChanged}" />
-
                 <TextBox
                     Margin="0,0,0,16"
+                    materialDesign:HintAssist.Foreground="#B3D6EBFF"
                     materialDesign:HintAssist.Hint="工号"
+                    materialDesign:TextFieldAssist.UnderlineBrush="#7FC4FF"
+                    CaretBrush="#FFF6FBFF"
+                    Foreground="#FFF6FBFF"
+                    SelectionBrush="#667FC4FF"
                     Text="{Binding WorkNumber, UpdateSourceTrigger=PropertyChanged}" />
-
                 <PasswordBox
                     Margin="0,0,0,16"
+                    materialDesign:HintAssist.Foreground="#B3D6EBFF"
                     materialDesign:HintAssist.Hint="密码"
-                    materialDesign:PasswordBoxAssist.Password="{Binding Password, UpdateSourceTrigger=PropertyChanged}" />
+                    materialDesign:PasswordBoxAssist.Password="{Binding Password, UpdateSourceTrigger=PropertyChanged}"
+                    materialDesign:TextFieldAssist.UnderlineBrush="#7FC4FF"
+                    CaretBrush="#FFF6FBFF"
+                    Foreground="#FFF6FBFF"
+                    SelectionBrush="#667FC4FF" />
 
                 <!--  离线登录选项  -->
-                <CheckBox
+                <!--<CheckBox
                     Margin="0,0,0,24"
                     Content="离线登录"
-                    IsChecked="{Binding IsOfflineLogin}" />
+                    Foreground="#CDE6F3FF" />-->
 
-                <!--  按钮区：登录与取消  -->
+                <!--  按钮区：主按钮蓝渐变浮起，取消按钮幽灵样式  -->
                 <Button
                     Height="40"
                     Margin="0,0,0,8"
-                    Background="{DynamicResource PrimaryHueMidBrush}"
+                    BorderThickness="0"
                     Command="{Binding LoginCommand}"
                     Content="登录"
-                    IsDefault="True" />
+                    Cursor="Hand"
+                    Foreground="#FFFFFFFF"
+                    IsDefault="True">
+                    <Button.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Offset="0" Color="#FF2D6EC2" />
+                            <GradientStop Offset="1" Color="#FF154C99" />
+                        </LinearGradientBrush>
+                    </Button.Background>
+                    <Button.Effect>
+                        <DropShadowEffect
+                            BlurRadius="14"
+                            Direction="270"
+                            Opacity="0.55"
+                            ShadowDepth="2"
+                            Color="#33244B7E" />
+                    </Button.Effect>
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border
+                                x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="#4DFFFFFF"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                                <ContentPresenter
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    RecognizesAccessKey="True" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Opacity" Value="1.0" />
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="False">
+                                    <Setter TargetName="Bd" Property="Opacity" Value="0.96" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
 
                 <Button
                     Height="36"
+                    Background="Transparent"
+                    BorderBrush="#59FFFFFF"
+                    BorderThickness="1"
                     Command="{Binding CancelCommand}"
-                    Content="取消" />
+                    Content="取消"
+                    Cursor="Hand"
+                    Foreground="#D9EAF6FF">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border
+                                x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                                <ContentPresenter
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    RecognizesAccessKey="True" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#14FFFFFF" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
             </StackPanel>
         </materialDesign:Card>
     </Grid>

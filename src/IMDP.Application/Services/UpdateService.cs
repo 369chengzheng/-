@@ -2,6 +2,8 @@
 // 文件名：UpdateService.cs
 // 功能描述：应用更新服务实现，提供版本检查、更新记录的持久化。
 //           版本检查：HttpClient 下载并解析内网 IIS 上的 version.xml 清单，与当前版本比较。
+//           清单同步：更新 version.xml 时优先从更新服务器获取清单作为基底（权威数据源、历史最全），
+//                     服务器没有时回退读取本地文件，两者均无则本地全新生成。
 //           下载安装：由 Presentation 层 UpdateViewModel 调用 AutoUpdater.NET 内置流程完成
 //                     （断点续传、SHA256 校验、启动安装包、重启），本层不依赖 AutoUpdater.NET。
 //           更新记录：开始/完成时写入 AppUpdateRecord 表（真实数据库操作）。
@@ -168,7 +170,10 @@ public class UpdateService : IUpdateService
 
     /// <inheritdoc/>
     /// <remarks>
-    /// 流程：按 Id 查询记录 → UPDATE 状态为 已完成/失败、完成时间、错误信息。
+    /// 流程：按 Id 查询记录 → UPDATE 状态为 已完成/失败、错误信息。
+    /// 完成时间规则：成功时不写 CompletedTime（留空，待该机器下一次成功登录时由
+    /// <see cref="IAppUpdateRecordRepository.BackfillCompletedTimeAsync"/> 回填为登录时间，
+    /// 语义为"升级真正闭环 = 新版本启动并成功登录"）；失败时仍记录失败时刻 CompletedTime = 当前时间。
     /// 记录不存在时静默返回。
     /// </remarks>
     public async Task RecordUpdateCompletedAsync(long recordId, bool success, string? errorMessage = null)
@@ -177,15 +182,35 @@ public class UpdateService : IUpdateService
         if (record == null) return;
 
         record.UpdateStatus = success ? "已完成" : "失败";
-        record.CompletedTime = DateTime.Now;
+        // 成功时保持 CompletedTime 为 null，等待升级后软件自动重启时回填本次启动时间；
+        // 失败时记录失败时刻（非空不会被回填覆盖）
+        record.CompletedTime = success ? null : DateTime.Now;
         record.ErrorMessage = errorMessage ?? string.Empty;
         await _updateRecordRepository.UpdateAsync(record);
     }
 
     /// <inheritdoc/>
     /// <remarks>
-    /// 解析本地 version.xml，若传入的新版本号高于当前根版本号，将原有的最新版本数据归档放入 &lt;history&gt; 节点列表中，
-    /// 并将新版本号、changelog、releaseDate 等覆盖写入根节点并保存至磁盘文件。
+    /// 流程：取本机机器名与本次启动时间 → 调用仓储批量回填该机器名下所有
+    /// "完成时间仍为空"的升级记录（CompletedTime IS NULL 且 UpdateTime &lt;= 本次启动时间）。
+    /// 升级后 AutoUpdater 自动重启的新进程启动时会命中待回填记录，将本次启动时间写入为升级完成时间；
+    /// 此后每次正常启动该条件自然不命中（记录已完成回填），不产生额外数据库写操作。
+    /// </remarks>
+    public async Task<int> BackfillCompletedTimeOnStartupAsync()
+    {
+        var machineName = Environment.MachineName;
+        var startupTime = DateTime.Now;
+        return await _updateRecordRepository.BackfillCompletedTimeAsync(machineName, startupTime);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// 流程：按"服务器优先、本地回退"的顺序加载 version.xml 基底 →
+    /// ① HttpClient GET 更新服务器上的 version.xml，成功且解析有效则以服务器内容为基底（权威数据源，history 历史最全）；
+    /// ② 服务器没有（404/网络异常/解析失败）时回退读取本地运行目录下的 version.xml；
+    /// ③ 本地也没有时全新生成根节点。
+    /// 基底确定后：仅当传入的新版本号高于基底根版本号时，将原根节点版本归档进 &lt;history&gt; 并追加新版本；
+    /// 版本相同则幂等刷新；新版本更低则仅同步基底内容到本地（不降级）。异常时静默处理。
     /// </remarks>
     public async Task UpdateVersionXmlAsync(string version, string changelog, string? url = null, string? releaseTime = null, bool mandatory = false)
     {
@@ -199,7 +224,16 @@ public class UpdateService : IUpdateService
             var doc = new XmlDocument();
             XmlElement? rootNode = null;
 
-            if (File.Exists(xmlPath) && new FileInfo(xmlPath).Length > 0)
+            // ===== 第①步：优先从更新服务器获取 version.xml 作为基底（服务器为权威数据源） =====
+            var serverDoc = await TryLoadServerVersionXmlAsync();
+            if (serverDoc != null)
+            {
+                doc = serverDoc;
+                rootNode = doc.DocumentElement;
+            }
+
+            // ===== 第②步：服务器没有时回退读取本地运行目录下的 version.xml =====
+            if (rootNode == null && File.Exists(xmlPath) && new FileInfo(xmlPath).Length > 0)
             {
                 try
                 {
@@ -213,6 +247,7 @@ public class UpdateService : IUpdateService
                 }
             }
 
+            // ===== 第③步：本地也没有时全新生成根节点 =====
             if (rootNode == null)
             {
                 doc = new XmlDocument();
@@ -225,60 +260,65 @@ public class UpdateService : IUpdateService
             var currentXmlVerNode = rootNode.SelectSingleNode("version");
             var currentXmlVer = currentXmlVerNode?.InnerText?.Trim();
 
-            // 若当前根节点已有版本号且与新版本号不同，则将原有根节点保存进 <history> 列表的头部
-            if (!string.IsNullOrEmpty(currentXmlVer) && !string.Equals(currentXmlVer, cleanVersion, StringComparison.OrdinalIgnoreCase))
+            // 仅当新版本号高于基底根版本号时才归档旧版本并追加新版本；
+            // 版本相同则幂等刷新根节点字段；新版本更低则不降级（保留服务器/本地的高版本，仅落盘同步基底内容）
+            if (string.IsNullOrEmpty(currentXmlVer) || IsNewerVersion(cleanVersion, currentXmlVer))
             {
-                var historyNode = rootNode.SelectSingleNode("history") as XmlElement;
-                if (historyNode == null)
+                // 若当前根节点已有版本号且与新版本号不同，则将原有根节点保存进 <history> 列表的头部
+                if (!string.IsNullOrEmpty(currentXmlVer) && !string.Equals(currentXmlVer, cleanVersion, StringComparison.OrdinalIgnoreCase))
                 {
-                    historyNode = doc.CreateElement("history");
+                    var historyNode = rootNode.SelectSingleNode("history") as XmlElement;
+                    if (historyNode == null)
+                    {
+                        historyNode = doc.CreateElement("history");
+                    }
+
+                    var historyItem = doc.CreateElement("item");
+
+                    var oldVer = doc.CreateElement("version");
+                    oldVer.InnerText = currentXmlVer;
+                    historyItem.AppendChild(oldVer);
+
+                    var oldUrl = doc.CreateElement("url");
+                    oldUrl.InnerText = ToRelativeUrlPath(rootNode.SelectSingleNode("url")?.InnerText?.Trim());
+                    historyItem.AppendChild(oldUrl);
+
+                    var oldChangelog = doc.CreateElement("changelog");
+                    oldChangelog.InnerText = rootNode.SelectSingleNode("changelog")?.InnerText?.Trim() ?? string.Empty;
+                    historyItem.AppendChild(oldChangelog);
+
+                    var oldDate = doc.CreateElement("releaseDate");
+                    oldDate.InnerText = rootNode.SelectSingleNode("releaseDate")?.InnerText?.Trim() ?? string.Empty;
+                    historyItem.AppendChild(oldDate);
+
+                    // 插入到 history 节点顶部
+                    if (historyNode.HasChildNodes)
+                    {
+                        historyNode.InsertBefore(historyItem, historyNode.FirstChild);
+                    }
+                    else
+                    {
+                        historyNode.AppendChild(historyItem);
+                    }
+
+                    // 移除原有的 history 节点再统一重新追加置底
+                    if (historyNode.ParentNode == rootNode)
+                    {
+                        rootNode.RemoveChild(historyNode);
+                    }
+                    rootNode.AppendChild(historyNode);
                 }
 
-                var historyItem = doc.CreateElement("item");
-
-                var oldVer = doc.CreateElement("version");
-                oldVer.InnerText = currentXmlVer;
-                historyItem.AppendChild(oldVer);
-
-                var oldUrl = doc.CreateElement("url");
-                oldUrl.InnerText = ToRelativeUrlPath(rootNode.SelectSingleNode("url")?.InnerText?.Trim());
-                historyItem.AppendChild(oldUrl);
-
-                var oldChangelog = doc.CreateElement("changelog");
-                oldChangelog.InnerText = rootNode.SelectSingleNode("changelog")?.InnerText?.Trim() ?? string.Empty;
-                historyItem.AppendChild(oldChangelog);
-
-                var oldDate = doc.CreateElement("releaseDate");
-                oldDate.InnerText = rootNode.SelectSingleNode("releaseDate")?.InnerText?.Trim() ?? string.Empty;
-                historyItem.AppendChild(oldDate);
-
-                // 插入到 history 节点顶部
-                if (historyNode.HasChildNodes)
+                // 更新或设置当前根节点的属性字段（url 统一转为相对路径存储，不记录 IP 与端口号）
+                SetOrUpdateXmlChild(doc, rootNode, "version", cleanVersion);
+                if (!string.IsNullOrEmpty(url))
                 {
-                    historyNode.InsertBefore(historyItem, historyNode.FirstChild);
+                    SetOrUpdateXmlChild(doc, rootNode, "url", ToRelativeUrlPath(url));
                 }
-                else
-                {
-                    historyNode.AppendChild(historyItem);
-                }
-
-                // 移除原有的 history 节点再统一重新追加置底
-                if (historyNode.ParentNode == rootNode)
-                {
-                    rootNode.RemoveChild(historyNode);
-                }
-                rootNode.AppendChild(historyNode);
+                SetOrUpdateXmlChild(doc, rootNode, "changelog", changelog ?? string.Empty);
+                SetOrUpdateXmlChild(doc, rootNode, "releaseDate", releaseTime ?? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                SetOrUpdateXmlChild(doc, rootNode, "mandatory", mandatory.ToString().ToLowerInvariant());
             }
-
-            // 更新或设置当前根节点的属性字段（url 统一转为相对路径存储，不记录 IP 与端口号）
-            SetOrUpdateXmlChild(doc, rootNode, "version", cleanVersion);
-            if (!string.IsNullOrEmpty(url))
-            {
-                SetOrUpdateXmlChild(doc, rootNode, "url", ToRelativeUrlPath(url));
-            }
-            SetOrUpdateXmlChild(doc, rootNode, "changelog", changelog ?? string.Empty);
-            SetOrUpdateXmlChild(doc, rootNode, "releaseDate", releaseTime ?? DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-            SetOrUpdateXmlChild(doc, rootNode, "mandatory", mandatory.ToString().ToLowerInvariant());
 
             // 保持 history 节点在 rootNode 子节点的最后
             var existingHistory = rootNode.SelectSingleNode("history");
@@ -314,6 +354,40 @@ public class UpdateService : IUpdateService
         catch
         {
             // 异常时静默处理
+        }
+    }
+
+    /// <summary>
+    /// 尝试从更新服务器获取 version.xml 清单
+    /// <para>HttpClient GET <see cref="_updateXmlUrl"/>，成功且能解析出有效根节点时返回 XmlDocument；
+    /// 服务器上没有该文件（404）、网络异常或清单内容无效时返回 null，由调用方回退读取本地文件。</para>
+    /// </summary>
+    /// <returns>服务器清单的 XmlDocument；获取或解析失败返回 null</returns>
+    private async Task<XmlDocument?> TryLoadServerVersionXmlAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_updateXmlUrl))
+            return null;
+
+        try
+        {
+            var xml = await _httpClient.GetStringAsync(_updateXmlUrl);
+            if (string.IsNullOrWhiteSpace(xml))
+                return null;
+
+            var doc = new XmlDocument();
+            doc.LoadXml(xml);
+
+            // 根节点必须存在且带有有效 version 子节点，否则视为无效清单
+            var root = doc.DocumentElement;
+            if (root == null || string.IsNullOrEmpty(root.SelectSingleNode("version")?.InnerText?.Trim()))
+                return null;
+
+            return doc;
+        }
+        catch
+        {
+            // 服务器不可达（404/超时/拒绝连接等）时静默返回 null，走本地回退
+            return null;
         }
     }
 
@@ -407,6 +481,8 @@ public class UpdateService : IUpdateService
     /// <remarks>
     /// 读取 AppVersionConfig 常量类中定义的最新版本号、更新说明、发布时间、下载地址与强更状态，
     /// 自动调用 UpdateVersionXmlAsync 将代码中的最新版本同步写回 version.xml（含原版本历史归档）。
+    /// 基底加载顺序：优先从更新服务器获取 version.xml（权威数据源、history 历史最全），
+    /// 服务器没有时回退本地文件，两者均无则全新生成；版本不高于基底时不降级覆盖。
     /// </remarks>
     public async Task SyncCodeVersionToXmlAsync()
     {

@@ -84,4 +84,23 @@ public class AppUpdateRecordRepository : Repository<AppUpdateRecord>, IAppUpdate
             PageSize = pageSize
         };
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// 批量 UPDATE：将本机器名下所有"完成时间仍为空"的升级记录的 CompletedTime 回填为指定时间。
+    /// 条件设计（详见接口注释）：机器名精确匹配 + CompletedTime IS NULL + UpdateTime &lt;= 指定时间，
+    /// 已有完成时间的历史记录一律不覆盖。
+    /// </remarks>
+    public async Task<int> BackfillCompletedTimeAsync(string machineName, DateTime completedTime)
+    {
+        if (string.IsNullOrWhiteSpace(machineName))
+            return 0;
+
+        return await _db.Updateable<AppUpdateRecord>()
+            .SetColumns(r => r.CompletedTime == completedTime)
+            .Where(r => r.ClientMachineName == machineName
+                     && r.CompletedTime == null
+                     && r.UpdateTime <= completedTime)
+            .ExecuteCommandAsync();
+    }
 }

@@ -1,8 +1,9 @@
+using System.Collections.ObjectModel;
 using IMDP.Domain.Products;
 
 namespace IMDP.Products.WaterOW.ProductA;
 
-public class WaterOWProductAPlugin : ProductPluginBase
+public class WaterOWProductAPlugin : ProductPluginBase, IProductPluginViewRoutes
 {
     public override string ProductKey => "WaterOW.ProductA";
     public override string Category => ProductCategory.WaterOW;
@@ -15,4 +16,8 @@ public class WaterOWProductAPlugin : ProductPluginBase
         FunctionModuleType.WholeSet,
         FunctionModuleType.WholeGet
     };
+
+    /// <summary>空壳插件尚无自有视图；空路由表使导航返回 null（记 Warn 日志），不再落入其他产品的共享页面。</summary>
+    public IReadOnlyDictionary<FunctionModuleType, string> ViewRoutes { get; } =
+        new ReadOnlyDictionary<FunctionModuleType, string>(new Dictionary<FunctionModuleType, string>());
 }

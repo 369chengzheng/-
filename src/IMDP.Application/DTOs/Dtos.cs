@@ -458,7 +458,7 @@ public class AppUpdateRecordDto
     /// <summary>升级开始时间（可空）</summary>
     public DateTime? UpdateTime { get; set; }
 
-    /// <summary>升级完成时间（可空）</summary>
+    /// <summary>升级完成时间（可空；成功记录为升级后软件自动重启的本次启动时间，失败记录为失败时刻）</summary>
     public DateTime? CompletedTime { get; set; }
 
     /// <summary>升级失败时的错误信息（可空）</summary>

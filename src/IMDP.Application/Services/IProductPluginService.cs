@@ -33,6 +33,11 @@ public interface IProductPluginRegistry
     /// <returns>插件信息 DTO；不存在返回 null</returns>
     ProductPluginDto? GetPlugin(string productKey);
 
+    /// <summary>
+    /// 只读获取已注册插件实例，供导航读取可选的插件自有路由；不存在返回 null，不访问物料仓储
+    /// </summary>
+    ProductPluginBase? GetRegisteredPlugin(string productKey);
+
     /// <summary>按现有功能类型去重规则解析菜单，保留首次提供该功能的插件标识和标题。</summary>
     Task<IReadOnlyList<ProductMenuItemDto>> GetMenuEntriesForMaterialAsync(string materialNumber);
 

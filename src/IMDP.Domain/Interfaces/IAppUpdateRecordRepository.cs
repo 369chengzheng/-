@@ -28,4 +28,19 @@ public interface IAppUpdateRecordRepository : IRepository<AppUpdateRecord>
     /// <param name="pageSize">每页条数</param>
     /// <returns>分页结果（按升级开始时间倒序）</returns>
     Task<PagedResult<AppUpdateRecord>> GetPagedAsync(string versionKeyword, string releaseNotesKeyword, DateTime? startTime, DateTime? endTime, int pageIndex, int pageSize);
+
+    /// <summary>
+    /// 按机器名回填升级完成时间为指定时间
+    /// <para>升级完成时间语义：升级下载完成后，该机器安装新版并自动重启的本次启动时间。</para>
+    /// <para>应用每次启动时调用（升级后 AutoUpdater 重启的新进程会命中）：将该机器名下所有
+    /// "完成时间仍为空"的升级记录批量回填为指定时间。</para>
+    /// <para>仅更新满足以下全部条件的记录，已有完成时间的历史记录一律不覆盖：</para>
+    /// <para>1. ClientMachineName 等于本机机器名（与其他机器的记录互不影响）；</para>
+    /// <para>2. CompletedTime IS NULL（下载成功的记录完成时间留空等待回填；失败记录已写入失败时刻自动排除）；</para>
+    /// <para>3. UpdateTime &lt;= 指定时间（防止回填晚于指定时间才发起的升级记录，时钟偏移/并发保护）。</para>
+    /// </summary>
+    /// <param name="machineName">客户端机器名（Environment.MachineName）</param>
+    /// <param name="completedTime">回填的完成时间（应用启动时为本次启动时间）</param>
+    /// <returns>实际回填的记录条数</returns>
+    Task<int> BackfillCompletedTimeAsync(string machineName, DateTime completedTime);
 }

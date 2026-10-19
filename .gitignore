@@ -34,3 +34,8 @@
 /.workbuddy/memory
 /src/Products/GasDG/IMDP.Products.GasDG.LaserDetector/bin/Debug/net10.0-windows
 /src/Products/GasDG/IMDP.Products.GasDG.LaserDetector/obj
+/src/IMDP.Application/bin/Release/net10.0
+/src/IMDP.Presentation/version.xml
+# ===== 构建输出目录（bin/obj 通配所有配置与项目） =====
+[Bb]in/
+[Oo]bj/

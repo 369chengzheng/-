@@ -17,6 +17,10 @@
                              PrimaryColor="Blue"
                              SecondaryColor="Lime"
                              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes" />
+                <!--  HandyControl 主题（Growl 提示等自有控件所需；置于 MaterialDesign 之前，
+                      保证后合并的 MaterialDesign 样式优先，不改变现有界面外观）  -->
+                <ResourceDictionary Source="pack://application:,,,/HandyControl;component/Themes/SkinDefault.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/HandyControl;component/Themes/Theme.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign3.Defaults.xaml" />
             </ResourceDictionary.MergedDictionaries>
 

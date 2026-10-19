@@ -3,6 +3,10 @@
      功能描述：升级日志查询视图（4.16 模块）。以分页表格形式展示应用升级记录，
                支持按版本号（模糊匹配）+ 更新内容关键词 + 升级时间范围查询，
                列字段严格参考数据库表 AppUpdateRecords，并提供导出 Excel 功能。
+               升级完成时间语义：升级下载完成后，软件自动重启的本次启动时间
+               （启动时回填；失败记录的完成时间为失败时刻）。
+               布局采用分层卡片式：导航条、查询条件、升级信息各自独立白色横条，
+               页面背景为浅灰色（与 UserManageView 风格一致）。
      ============================================================================= -->
 <UserControl x:Class="IMDP.Presentation.Views.UpdateQueryView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -12,43 +16,77 @@
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              mc:Ignorable="d"
              d:DesignHeight="600" d:DesignWidth="1000"
-             Background="{DynamicResource MaterialDesignPaper}">
-    <DockPanel Margin="16">
-        <!-- 面包屑导航区：首页 > 升级日志查询 -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
-            <Button Content="首页" Style="{StaticResource BreadcrumbButtonStyle}"
-                    Command="{Binding GoHomeCommand}"/>
-            <materialDesign:PackIcon Kind="ChevronRight" Width="16" Height="16"
-                                     Foreground="{DynamicResource MaterialDesignBody}" Opacity="0.5"/>
-            <TextBlock Text="升级日志查询" Style="{StaticResource BreadcrumbCurrentStyle}"/>
-        </StackPanel>
-        <!-- 数据展示区：查询条件 + 升级记录列表与分页栏 -->
-        <materialDesign:Card Padding="16">
+             Background="{StaticResource ImdpPageBackgroundBrush}">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="46"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 卡片1 导航条：首页 > 升级日志查询，独立白色横条 -->
+        <Border Grid.Row="0"
+                Margin="0,0,0,10"
+                Padding="28,0"
+                Style="{StaticResource ManagementSurfaceStyle}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="首页"
+                        Style="{StaticResource BreadcrumbButtonStyle}"
+                        Command="{Binding GoHomeCommand}"/>
+                <TextBlock Margin="3,0"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource ImdpTextBrush}"
+                           Text="&gt;"/>
+                <TextBlock VerticalAlignment="Center"
+                           Foreground="{StaticResource ImdpTextBrush}"
+                           FontSize="14"
+                           Text="升级日志查询"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 卡片2 查询条件区：版本号 + 更新内容关键词 + 升级时间范围 + 查询按钮，同一水平 StackPanel -->
+        <Border Grid.Row="1"
+                Margin="0,0,0,10"
+                Padding="28,18"
+                Style="{StaticResource ManagementSurfaceStyle}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="版本号:" VerticalAlignment="Center" Margin="0,0,8,0"
+                           Foreground="{StaticResource ImdpTextBrush}"/>
+                <TextBox Width="140" Height="32" Margin="0,0,28,0" VerticalContentAlignment="Center"
+                         Text="{Binding VersionKeyword, UpdateSourceTrigger=PropertyChanged}"
+                         materialDesign:HintAssist.Hint="版本号模糊查询"/>
+                <TextBlock Text="更新内容:" VerticalAlignment="Center" Margin="0,0,8,0"
+                           Foreground="{StaticResource ImdpTextBrush}"/>
+                <TextBox Width="160" Height="32" Margin="0,0,28,0" VerticalContentAlignment="Center"
+                         Text="{Binding ReleaseNotesKeyword, UpdateSourceTrigger=PropertyChanged}"
+                         materialDesign:HintAssist.Hint="更新内容关键词"/>
+                <TextBlock Text="升级时间:" VerticalAlignment="Center" Margin="0,0,8,0"
+                           Foreground="{StaticResource ImdpTextBrush}"/>
+                <DatePicker Width="140" Height="32" Margin="0,0,4,0" SelectedDate="{Binding StartTime}"/>
+                <TextBlock Text="至" VerticalAlignment="Center" Margin="4,0"
+                           Foreground="{StaticResource ImdpTextBrush}"/>
+                <DatePicker Width="140" Height="32" Margin="4,0,28,0" SelectedDate="{Binding EndTime}"/>
+                <Button Content="查询" Command="{Binding QueryCommand}"
+                        Style="{StaticResource ManagementActionButtonStyle}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 卡片3 升级信息：升级记录列表与分页栏 -->
+        <Border Grid.Row="2"
+                Padding="28"
+                Style="{StaticResource ManagementSurfaceStyle}">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <!-- 查询条件区：版本号 + 更新内容关键词 + 升级时间范围 + 查询/重置/导出按钮 -->
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
-                    <TextBlock Text="版本号:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBox Width="140" Height="32" Margin="0,0,16,0" VerticalContentAlignment="Center"
-                             Text="{Binding VersionKeyword, UpdateSourceTrigger=PropertyChanged}"
-                             materialDesign:HintAssist.Hint="版本号模糊查询"/>
-                    <TextBlock Text="更新内容:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBox Width="160" Height="32" Margin="0,0,16,0" VerticalContentAlignment="Center"
-                             Text="{Binding ReleaseNotesKeyword, UpdateSourceTrigger=PropertyChanged}"
-                             materialDesign:HintAssist.Hint="更新内容关键词"/>
-                    <TextBlock Text="升级时间:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <DatePicker Width="140" Height="32" Margin="0,0,4,0" SelectedDate="{Binding StartTime}"/>
-                    <TextBlock Text="至" VerticalAlignment="Center" Margin="4,0"/>
-                    <DatePicker Width="140" Height="32" Margin="4,0,16,0" SelectedDate="{Binding EndTime}"/>
-                    <Button Content="查询" Command="{Binding QueryCommand}" Width="80" Height="32" Margin="8,0,0,0"/>
-                </StackPanel>
+
                 <!-- 升级记录数据表格，列字段绑定至 AppUpdateRecordDto 属性 -->
-                <DataGrid Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
-                          ItemsSource="{Binding Records}">
+                <DataGrid Grid.Row="0"
+                          AutoGenerateColumns="False"
+                          IsReadOnly="True"
+                          ItemsSource="{Binding Records}"
+                          Style="{StaticResource ManagementDataGridStyle}">
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="升级前版本号" Binding="{Binding CurrentVersion}" Width="120"/>
                         <DataGridTextColumn Header="升级后版本号" Binding="{Binding TargetVersion}" Width="120"/>
@@ -76,7 +114,10 @@
                 </DataGrid>
 
                 <!-- 分页栏 -->
-                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+                <StackPanel Grid.Row="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            Margin="0,12,0,0">
                     <TextBlock VerticalAlignment="Center" Margin="0,0,12,0">
                         <Run Text="共 "/><Run Text="{Binding TotalCount}"/><Run Text=" 条   "/>
                         <Run Text="{Binding TotalPages, Mode=OneWay}"/><Run Text=" 页   第 "/>
@@ -90,6 +131,6 @@
                               ItemsSource="{Binding PageSizeOptions}" SelectedItem="{Binding PageSize}"/>
                 </StackPanel>
             </Grid>
-        </materialDesign:Card>
-    </DockPanel>
+        </Border>
+    </Grid>
 </UserControl>

@@ -1,6 +1,9 @@
 using Prism.Ioc;
 using Prism.Modularity;
 using IMDP.Application.Services;
+using IMDP.Domain.Interfaces;
+using IMDP.Infrastructure.Serial;
+using IMDP.Products.GasDG.LaserDetector.Services;
 
 namespace IMDP.Products.GasDG.LaserDetector;
 
@@ -26,7 +29,13 @@ public class GasDGLaserDetectorModule : IModule
     /// <param name="containerRegistry">容器注册器</param>
     public void RegisterTypes(IContainerRegistry containerRegistry)
     {
-        // 模块检测方案配置视图（与 ProductPluginNavigationService.GetViewName 的 LaserDetectorView 映射一致）
+        // 激光检测服务（单例：复用串口连接与配置缓存）
+        containerRegistry.RegisterSingleton<LaserDetectorDetectService>();
+
+        // 模块检测方案配置视图（与 ProductPluginNavigationService.GetViewName 的 LaserDetectorConfigView 映射一致）
+        containerRegistry.RegisterForNavigation<Views.LaserDetectorConfigView, ViewModels.LaserDetectorConfigViewModel>();
+
+        // 模块检测校验视图（与 ProductPluginNavigationService.GetViewName 的 LaserDetectorView 映射一致）
         containerRegistry.RegisterForNavigation<Views.LaserDetectorView, ViewModels.LaserDetectorViewModel>();
     }
 }

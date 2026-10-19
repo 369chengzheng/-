@@ -52,7 +52,11 @@ public interface IUpdateService
     /// <returns>新建更新记录的主键 Id</returns>
     Task<long> RecordUpdateStartAsync(VersionInfo version, string currentVersion);
 
-    /// <summary>记录更新完成（UPDATE 更新记录的状态、完成时间、错误信息）</summary>
+    /// <summary>
+    /// 记录更新完成（UPDATE 更新记录的状态与错误信息）
+    /// <para>完成时间规则：成功时不写 CompletedTime（留空，待升级后软件自动重启时回填为本次启动时间，
+    /// 语义为"升级真正闭环 = 新版本程序启动成功"）；失败时记录失败时刻。</para>
+    /// </summary>
     /// <param name="recordId">更新记录 Id</param>
     /// <param name="success">是否成功</param>
     /// <param name="errorMessage">失败时的错误信息（成功时为 null）</param>
@@ -60,9 +64,22 @@ public interface IUpdateService
     Task RecordUpdateCompletedAsync(long recordId, bool success, string? errorMessage = null);
 
     /// <summary>
+    /// 启动时回填升级完成时间
+    /// <para>升级完成时间语义：升级下载完成后，该机器安装新版并自动重启的本次启动时间。</para>
+    /// <para>应用每次启动时调用（升级后 AutoUpdater 重启的新进程会命中）：将本机器名下所有
+    /// "完成时间仍为空"的升级记录批量回填为本次启动时间。</para>
+    /// <para>仅回填 CompletedTime IS NULL 且 UpdateTime &lt;= 本次启动时间的记录：
+    /// 已有完成时间的记录不覆盖；防止误回填晚于本次启动才发起的升级记录。</para>
+    /// </summary>
+    /// <returns>实际回填的记录条数</returns>
+    Task<int> BackfillCompletedTimeOnStartupAsync();
+
+    /// <summary>
     /// 同步更新本地 version.xml 清单文件中的版本信息
-    /// <para>更新版本时调用：若传入的版本号高于当前版本，自动将原有的最新版本转存至 &lt;history&gt; 节点列表中，</para>
-    /// <para>并将新版本号、更新内容 (changelog) 及发布时间 (releaseTime) 写入根节点。</para>
+    /// <para>更新版本时调用：基底按"服务器优先、本地回退"顺序加载 —— 优先获取更新服务器上的 version.xml，
+    /// 服务器没有时读取本地文件，两者均无则全新生成。</para>
+    /// <para>若传入的版本号高于基底根版本，自动将原有的最新版本转存至 &lt;history&gt; 节点列表中（追加新版本），
+    /// 并将新版本号、更新内容 (changelog) 及发布时间 (releaseTime) 写入根节点；版本不高于基底时不降级覆盖。</para>
     /// </summary>
     /// <param name="version">新版本号（如 1.0.3 或 V1.0.3）</param>
     /// <param name="changelog">更新日志描述</param>
@@ -74,8 +91,10 @@ public interface IUpdateService
 
     /// <summary>
     /// 将代码硬编码中定义的最新版本与更新日志在软件启动时自动同步写入 version.xml
-    /// <para>若代码中的版本高于本地 xml 根节点的版本，将原 XML 根节点版本自动移入 &lt;history&gt; 列表中，</para>
-    /// <para>并将代码里的最新版本号、更新日志写回 root 节点。</para>
+    /// <para>基底按"服务器优先、本地回退"顺序加载：优先获取更新服务器上的 version.xml，
+    /// 服务器没有时回退本地文件，两者均无则全新生成。</para>
+    /// <para>若代码中的版本高于基底根节点的版本，将原 XML 根节点版本自动移入 &lt;history&gt; 列表中（追加新版本），
+    /// 并将代码里的最新版本号、更新日志写回 root 节点；版本不高于基底时不降级覆盖。</para>
     /// </summary>
     /// <returns>表示异步操作的任务</returns>
     Task SyncCodeVersionToXmlAsync();

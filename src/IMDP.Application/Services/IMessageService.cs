@@ -35,4 +35,23 @@ public interface IMessageService
     /// <param name="title">提示标题，默认“确认”。</param>
     /// <returns>用户点击“确定”返回 true；否则返回 false。</returns>
     bool ShowConfirm(string message, string title = "确认");
+
+    /// <summary>显示 Growl 信息轻提示（右上角滑出，自动消失）。</summary>
+    /// <param name="message">提示内容。</param>
+    void GrowlInfo(string message);
+
+    /// <summary>显示 Growl 成功轻提示。</summary>
+    /// <param name="message">提示内容。</param>
+    void GrowlSuccess(string message);
+
+    /// <summary>显示 Growl 警告轻提示。</summary>
+    /// <param name="message">提示内容。</param>
+    void GrowlWarning(string message);
+
+    /// <summary>
+    /// 显示 Growl 是/否确认轻提示（非阻塞，用户点击后经回调返回选择结果）。
+    /// </summary>
+    /// <param name="message">确认内容。</param>
+    /// <param name="callback">选择回调（参数 true=确认，false=取消；在 UI 线程执行）。</param>
+    void GrowlConfirm(string message, Action<bool> callback);
 }

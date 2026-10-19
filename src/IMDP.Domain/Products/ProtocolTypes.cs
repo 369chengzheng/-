@@ -135,6 +135,32 @@ public class FrameFormatConfig
     public byte? CommandFieldValue { get; set; }
 
     /// <summary>
+    /// 前导字节序列（可空，默认无前导）。如海外二代水表的唤醒前导 0x55。
+    /// <para>设为非空且 <see cref="PreambleRepeat"/> &gt; 0 时，<see cref="FrameComposer.BuildFrame"/>
+    /// 在帧头之前重复前置该序列（如 549 个 0x55 唤醒码）。
+    /// 前导不参与长度字段与校验码计算（长度/校验仅覆盖有效帧部分）。</para>
+    /// </summary>
+    public byte[]? Preamble { get; set; }
+
+    /// <summary>前导字节序列重复次数（默认 0；如海外表唤醒前导为 549）。</summary>
+    public int PreambleRepeat { get; set; }
+
+    /// <summary>
+    /// 前导尾部附加序列（可空，默认无）。如海外二代水表唤醒前导 549×0x55 之后的 5 个 0xFE 同步码。
+    /// <para>紧接在重复前导之后、帧头之前，同样不参与长度字段与校验码计算。</para>
+    /// </summary>
+    public byte[]? PreambleSuffix { get; set; }
+
+    /// <summary>
+    /// 命令码即全部负载（默认 false）。
+    /// <para>设为 true 时 <see cref="FrameComposer.BuildFrame"/> 把 command 首字节作为命令码写入命令字段，
+    /// 且不再把 command 拷入数据区——适用于"单命令码帧"，如威星海外二代水表协议的
+    /// 68 06 00 D0 3E 16（D0=进检定命令，数据区为空，帧长 6）。
+    /// 为 false 时沿用旧行为：CommandFieldValue 有值写固定值，否则命令字段取 command[0]，command 全量拷入数据区。</para>
+    /// </summary>
+    public bool CommandIsPayload { get; set; }
+
+    /// <summary>
     /// 响应匹配时的命令比对掩码（可空）。非空时 <see cref="FrameComposer.IsResponseMatch"/>
     /// 对请求/响应帧的命令字段做 (value &amp; mask) 比较；为空表示不比对命令（仅比对帧头与地址，向后兼容）。
     /// 例如 0xFF 表示精确比对；当响应命令位含标志位（如 0x5A 与 0xEA）时可用掩码只比有效位。

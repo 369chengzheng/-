@@ -41,6 +41,8 @@ public class UserService : IUserService
     /// <param name="userRepository">用户仓储（由 DI 注入）</param>
     /// <param name="loginRepository">登录记录仓储（写入 LoginRecords 表，由 DI 注入）</param>
     /// <param name="loginConfigRepository">登录配置日志仓储（写入 LoginConfig 表，由 DI 注入）</param>
+    /// <param name="currentContext">当前上下文（SqlSugar AOP 审计字段填充用，由 DI 注入）</param>
+    /// <param name="eventAggregator">事件聚合器（发布登录成功事件，由 DI 注入）</param>
     /// <param name="mesService">MES 服务（用于登录鉴权，由 DI 注入）</param>
     public UserService(IUserRepository userRepository, ILoginRepository loginRepository, ILoginConfigRepository loginConfigRepository, ICurrentContext currentContext, IEventAggregator eventAggregator, IMesService mesService)
     {

@@ -3,7 +3,9 @@
 // 功能描述：国内燃气（GasDG）板卡 A 插件定义。继承 ProductPluginBase，声明产品
 //          标识、分类、显示名称以及暴露给主框架的功能菜单项，供插件注册与导航使用。
 // =============================================================================
+using System.Collections.ObjectModel;
 using IMDP.Domain.Products;
+using IMDP.Products.GasDG.BoardA.Views;
 
 namespace IMDP.Products.GasDG.BoardA;
 
@@ -11,7 +13,7 @@ namespace IMDP.Products.GasDG.BoardA;
 /// 国内燃气板卡 A 插件定义类。
 /// <para>继承 <see cref="ProductPluginBase"/>，向主框架暴露本产品的元数据与可用菜单。</para>
 /// </summary>
-public class GasDGBoardAPlugin : ProductPluginBase
+public class GasDGBoardAPlugin : ProductPluginBase, IProductPluginViewRoutes
 {
     /// <summary>
     /// 获取产品唯一标识键。
@@ -37,4 +39,14 @@ public class GasDGBoardAPlugin : ProductPluginBase
         FunctionModuleType.BoardConfig,
         FunctionModuleType.Board
     };
+
+    /// <summary>
+    /// 获取功能模块到本插件已注册视图名的映射，供平台导航服务读取。
+    /// </summary>
+    public IReadOnlyDictionary<FunctionModuleType, string> ViewRoutes { get; } =
+        new ReadOnlyDictionary<FunctionModuleType, string>(new Dictionary<FunctionModuleType, string>
+        {
+            [FunctionModuleType.BoardConfig] = nameof(BoardConfigView),
+            [FunctionModuleType.Board] = nameof(BoardView)
+        });
 }

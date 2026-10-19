@@ -40,6 +40,49 @@ public class MessageService : IMessageService
         => Show(message, title, System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question)
            == System.Windows.MessageBoxResult.OK;
 
+    /// <inheritdoc />
+    public void GrowlInfo(string message)
+        => ShowGrowlOnUi(() => HandyControl.Controls.Growl.Info(message));
+
+    /// <inheritdoc />
+    public void GrowlSuccess(string message)
+        => ShowGrowlOnUi(() => HandyControl.Controls.Growl.Success(message));
+
+    /// <inheritdoc />
+    public void GrowlWarning(string message)
+        => ShowGrowlOnUi(() => HandyControl.Controls.Growl.Warning(message));
+
+    /// <inheritdoc />
+    public void GrowlConfirm(string message, Action<bool> callback)
+        => ShowGrowlOnUi(() => HandyControl.Controls.Growl.Ask(message, isConfirmed =>
+        {
+            // Growl 按钮点击回调本身在 UI 线程执行，直接分发选择结果
+            callback(isConfirmed);
+            return true; // 返回 true 表示允许关闭 Growl
+        }));
+
+    /// <summary>
+    /// 在 UI 线程上执行 Growl 轻提示（后台线程调用时自动调度回 UI 线程）。
+    /// </summary>
+    /// <param name="show">Growl 显示动作。</param>
+    private static void ShowGrowlOnUi(System.Action show)
+    {
+        var app = System.Windows.Application.Current;
+        if (app == null)
+        {
+            return;
+        }
+
+        if (app.Dispatcher.CheckAccess())
+        {
+            show();
+        }
+        else
+        {
+            app.Dispatcher.Invoke(show);
+        }
+    }
+
     /// <summary>
     /// 统一执行 MessageBox 显示，并在非 UI 线程调用时切回 UI 线程。
     /// </summary>

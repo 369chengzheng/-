@@ -51,7 +51,7 @@ public class AppUpdateRecord : IAuditable
     [SugarColumn(IsNullable = true)]
     public DateTime? UpdateTime { get; set; }
 
-    /// <summary>升级完成时间（可空，仅在状态变为 Success/Failed 时填充）</summary>
+    /// <summary>升级完成时间（可空；成功记录留空，待升级后软件自动重启时回填为本次启动时间；失败记录为失败时刻）</summary>
     [SugarColumn(IsNullable = true)]
     public DateTime? CompletedTime { get; set; }
 

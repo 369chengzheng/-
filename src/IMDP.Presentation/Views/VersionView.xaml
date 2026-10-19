@@ -3,6 +3,8 @@
     文件名：VersionView.xaml
     功能描述：版本迭代视图。以表格形式展示版本号、发布日期与更新内容
     （多行显示，按发布日期倒序），供用户查看版本迭代记录。
+    布局采用分层卡片式：导航条、版本迭代列表各自独立白色横条，
+    页面背景为浅灰色（与 UserManageView 风格一致）。
     =============================================================================
 -->
 <UserControl
@@ -16,44 +18,59 @@
     d:DataContext="{d:DesignInstance Type=viewmodels:VersionViewModel}"
     d:DesignHeight="600"
     d:DesignWidth="1000"
-    Background="{DynamicResource MaterialDesignPaper}"
+    Background="{StaticResource ImdpPageBackgroundBrush}"
     mc:Ignorable="d">
-    <DockPanel Margin="16">
-        <!--  面包屑导航区：首页 > 版本迭代  -->
-        <StackPanel
-            Margin="0,0,0,12"
-            DockPanel.Dock="Top"
-            Orientation="Horizontal">
-            <Button
-                Command="{Binding GoHomeCommand}"
-                Content="首页"
-                Style="{StaticResource BreadcrumbButtonStyle}" />
-            <materialDesign:PackIcon
-                Width="16"
-                Height="16"
-                Foreground="{DynamicResource MaterialDesignBody}"
-                Kind="ChevronRight"
-                Opacity="0.5" />
-            <TextBlock Style="{StaticResource BreadcrumbCurrentStyle}" Text="版本迭代" />
-        </StackPanel>
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="46" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-        <!--  版本迭代列表：版本号、发布日期、更新内容（多行显示，按发布日期倒序）  -->
-        <materialDesign:Card Padding="16">
+        <!--  卡片1 导航条：首页 > 版本迭代，独立白色横条  -->
+        <Border
+            Grid.Row="0"
+            Margin="0,0,0,10"
+            Padding="28,0"
+            Style="{StaticResource ManagementSurfaceStyle}">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button
+                    Command="{Binding GoHomeCommand}"
+                    Content="首页"
+                    Style="{StaticResource BreadcrumbButtonStyle}" />
+                <TextBlock
+                    Margin="3,0"
+                    VerticalAlignment="Center"
+                    Foreground="{StaticResource ImdpTextBrush}"
+                    Text="&gt;" />
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontSize="14"
+                    Foreground="{StaticResource ImdpTextBrush}"
+                    Text="版本迭代" />
+            </StackPanel>
+        </Border>
+
+        <!--  卡片2 版本迭代列表：版本号、发布日期、更新内容（多行显示，按发布日期倒序）  -->
+        <Border
+            Grid.Row="1"
+            Padding="28"
+            Style="{StaticResource ManagementSurfaceStyle}">
             <DockPanel>
                 <TextBlock
                     Margin="0,0,0,12"
                     DockPanel.Dock="Top"
                     FontSize="16"
                     FontWeight="Bold"
+                    Foreground="{StaticResource ImdpTextBrush}"
                     Text="版本迭代列表" />
                 <DataGrid
                     AutoGenerateColumns="False"
                     CanUserAddRows="False"
                     CanUserDeleteRows="False"
-                    GridLinesVisibility="Horizontal"
                     HeadersVisibility="Column"
                     IsReadOnly="True"
-                    ItemsSource="{Binding VersionRecords}">
+                    ItemsSource="{Binding VersionRecords}"
+                    Style="{StaticResource ManagementDataGridStyle}">
                     <DataGrid.Columns>
                         <!--  版本号列：可点击，点击后触发升级更新窗口（4.2）传入目标版本号  -->
                         <DataGridTemplateColumn Width="120" Header="版本号">
@@ -88,6 +105,6 @@
                     </DataGrid.Columns>
                 </DataGrid>
             </DockPanel>
-        </materialDesign:Card>
-    </DockPanel>
+        </Border>
+    </Grid>
 </UserControl>

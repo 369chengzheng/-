@@ -290,7 +290,12 @@ public partial class MainWindowViewModel : ObservableObject
         IsMenuPopupOpen = false;
 
         var viewName = _pluginNavigationService.GetViewName(module.ModuleType, module.ProductKey);
-        if (string.IsNullOrEmpty(viewName)) return;
+        if (string.IsNullOrEmpty(viewName))
+        {
+            // 路由未解析：插件未注册、未声明路由契约，或路由表缺少该功能项——记日志便于排查"点菜单没反应"
+            _logger.Warn($"菜单导航未解析到目标视图：功能={module.ModuleType}，插件={module.ProductKey}");
+            return;
+        }
 
         var planType = _pluginNavigationService.GetPlanType(module.ModuleType);
 

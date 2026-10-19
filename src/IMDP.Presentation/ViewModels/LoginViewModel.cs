@@ -12,6 +12,7 @@ using IMDP.Application.DTOs;
 using IMDP.Application.Events;
 using IMDP.Domain.Interfaces;
 using IMDP.Domain.Users;
+using IMDP.Infrastructure.Logging;
 
 namespace IMDP.Presentation.ViewModels;
 
@@ -26,6 +27,9 @@ public partial class LoginViewModel : ObservableObject, INavigationAware
     private readonly IEventAggregator _eventAggregator;
     private readonly IUserService _userService;
     private readonly ICurrentContext _currentContext;
+
+    /// <summary>NLog 日志（登录成功/失败/异常均记录工位与工号，不记录密码）</summary>
+    private static readonly NLog.ILogger _logger = LogHelper.For<LoginViewModel>();
 
     /// <summary>工位编号（默认 "1"）</summary>
     [ObservableProperty]
@@ -97,6 +101,7 @@ public partial class LoginViewModel : ObservableObject, INavigationAware
             {
                 // 失败也记录登录日志（含失败原因），随后弹窗提示
                 await _userService.RecordLoginAsync(WorkNumber, Station, LoginTypeCodes.Mes, false, mesResult.ErrorInfo);
+                _logger.Warn($"登录失败：工位={Station}，工号={WorkNumber}，原因={mesResult.ErrorInfo ?? "工号或密码错误"}");
                 _messageService.ShowError(mesResult.ErrorInfo ?? "工号或密码错误");
                 return;
             }
@@ -110,6 +115,9 @@ public partial class LoginViewModel : ObservableObject, INavigationAware
             }
 
             _currentContext.SetUser(user.WorkNumber, user.Role);
+
+            // 登录成功记入日志（工位 + 工号 + 姓名 + 角色）
+            _logger.Info($"登录成功：工位={Station}，工号={user.WorkNumber}，姓名={user.Name}，角色={user.Role}");
 
             // 3) 记录登录日志到 LoginRecords 表（工位/工号/IP/登录类型/登录结果/登录时间；写入失败不阻断登录）
             //    保存返回的记录 Id，供正常退出登录时回填登出时间
@@ -134,6 +142,7 @@ public partial class LoginViewModel : ObservableObject, INavigationAware
         {
             // 异常也按一次失败登录记录（原因=异常信息），随后弹窗提示
             await _userService.RecordLoginAsync(WorkNumber, Station, LoginTypeCodes.Mes, false, ex.Message);
+            _logger.Error(ex, $"登录异常：工位={Station}，工号={WorkNumber}");
             _messageService.ShowError($"登录失败: {ex.Message}");
         }
     }
