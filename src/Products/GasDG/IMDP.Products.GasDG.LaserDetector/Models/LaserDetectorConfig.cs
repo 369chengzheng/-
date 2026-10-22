@@ -6,6 +6,7 @@
 // =============================================================================
 using System.Collections.Generic;
 using System.Linq;
+using IMDP.Application.DTOs;
 
 namespace IMDP.Products.GasDG.LaserDetector.Models
 {
@@ -150,6 +151,12 @@ namespace IMDP.Products.GasDG.LaserDetector.Models
         public const string ProgramVersion = "VERSION";
         /// <summary>编译时间检测</summary>
         public const string CompilationTime = "COMPILE_TIME";
+        /// <summary>
+        /// 单工位最大超时时间（秒，默认 120）
+        /// <para>随方案参数模板 JSON 存储的全局项（不占数据库物理列），
+        /// 不参与 19 个检测项的界面陈列、协议下发与结果表展示。</para>
+        /// </summary>
+        public const string MaxTestTimeout = "MAX_TEST_TIMEOUT";
     }
 
     /// <summary>
@@ -187,6 +194,78 @@ namespace IMDP.Products.GasDG.LaserDetector.Models
                 new() { Name = "版本号", Code = LaserDetectorItemCodes.ProgramVersion, Kind = LaserDetectorItemKind.Value },
                 new() { Name = "编译时间", Code = LaserDetectorItemCodes.CompilationTime, Kind = LaserDetectorItemKind.Value }
             };
+        }
+    }
+
+    /// <summary>
+    /// 激光检测仪单工位最大超时参数项辅助类
+    /// <para>超时时间与 12V 电压等检测项一样，作为 <see cref="IMDP.Application.DTOs.TestParameterDto"/>
+    /// 参数项存于方案 ParametersJson 数组（形状与 Value 型一致：一个 VALUE 子参数存秒数），
+    /// 不占数据库物理列，服务层无感知。</para>
+    /// <para>该参数项由配置界面保存时注入、校验界面加载时读取；
+    /// 不参与配置界面 19 个检测项的陈列（编辑区加载时过滤）与结果表展示。</para>
+    /// </summary>
+    public static class LaserDetectorTimeoutParameter
+    {
+        /// <summary>超时时间默认值（秒；方案未配置或非法值时兜底）</summary>
+        public const int DefaultSeconds = 120;
+
+        /// <summary>参数项显示名称（存入 JSON 便于人工核查方案内容）</summary>
+        private const string DisplayName = "最大测试时间(秒)";
+
+        /// <summary>
+        /// 向参数列表注入（替换或追加）单工位最大超时参数项
+        /// </summary>
+        /// <param name="parameters">方案参数列表（先过滤旧超时项后传入，避免重复）</param>
+        /// <param name="seconds">超时秒数（≤0 时按默认值处理）</param>
+        public static void Upsert(List<TestParameterDto> parameters, int seconds)
+        {
+            var item = new TestParameterDto
+            {
+                Name = DisplayName,
+                Code = LaserDetectorItemCodes.MaxTestTimeout,
+                IsEnabled = true,
+                Order = 0,
+                Parameters = new List<ParasContentDto>
+                {
+                    new()
+                    {
+                        Code = SubParameterCodes.Value,
+                        Name = SubParameterCodes.ValueDisplayName,
+                        Order = SubParameterCodes.ValueOrder,
+                        Value = (seconds > 0 ? seconds : DefaultSeconds).ToString(),
+                        DefaultValue = DefaultSeconds.ToString()
+                    }
+                }
+            };
+
+            // 列表已含同 Code 项时原位替换，否则追加到末尾
+            var index = parameters.FindIndex(p => p.Code == LaserDetectorItemCodes.MaxTestTimeout);
+            if (index >= 0)
+            {
+                parameters[index] = item;
+            }
+            else
+            {
+                parameters.Add(item);
+            }
+        }
+
+        /// <summary>
+        /// 从方案参数列表解析单工位最大超时秒数
+        /// </summary>
+        /// <param name="parameters">方案参数列表（含超时参数项；界面编辑区集合应先过滤该项）</param>
+        /// <returns>超时秒数；项缺失或值非法时回退默认值 120</returns>
+        public static int Resolve(IReadOnlyList<TestParameterDto> parameters)
+        {
+            var item = parameters.FirstOrDefault(p => p.Code == LaserDetectorItemCodes.MaxTestTimeout);
+            if (item == null)
+            {
+                return DefaultSeconds;
+            }
+
+            var value = item.Parameters?.FirstOrDefault(sub => sub.Code == SubParameterCodes.Value)?.Value;
+            return int.TryParse(value, out var seconds) && seconds > 0 ? seconds : DefaultSeconds;
         }
     }
 }

@@ -25,14 +25,14 @@ public interface ICurrentContext
     /// <summary>当前应用名称（用于审计填充，可空）</summary>
     string? AppName { get; }
 
-    /// <summary>当前登录成功写入 LoginRecords 表的记录 Id（用于登出时回填登出时间；未登录为 null）</summary>
+    /// <summary>当前登录成功写入 LoginConfig 表的记录 Id（用于登出时回填登出时间；未登录为 null）</summary>
     long? CurrentLoginRecordId { get; }
 
     /// <summary>设置当前登录用户</summary>
     /// <param name="workNumber">登录用户工号</param>
     void SetUser(string workNumber, string role);
 
-    /// <summary>记录当前登录写入 LoginRecords 表的记录 Id（用于登出时回填登出时间）</summary>
+    /// <summary>记录当前登录写入 LoginConfig 表的记录 Id（用于登出时回填登出时间）</summary>
     /// <param name="loginRecordId">刚写入的登录记录主键 Id</param>
     void SetCurrentLoginRecordId(long loginRecordId);
 

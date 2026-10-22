@@ -18,7 +18,7 @@ public class CurrentContext : ICurrentContext
     // 默认用户名为 "system"，表示系统级操作
     private string _userName = "system";
     private string _role = string.Empty;
-    // 当前登录成功写入 LoginRecords 表的记录 Id（用于登出时回填登出时间）
+    // 当前登录成功写入 LoginConfig 表的记录 Id（用于登出时回填登出时间）
     private long? _currentLoginRecordId;
 
     /// <summary>当前计算机名称（取自 Environment.MachineName）。</summary>
@@ -29,7 +29,7 @@ public class CurrentContext : ICurrentContext
 
     public string Role => _role;
 
-    /// <summary>当前登录成功写入 LoginRecords 表的记录 Id（登出时回填登出时间用；未登录为 null）</summary>
+    /// <summary>当前登录成功写入 LoginConfig 表的记录 Id（登出时回填登出时间用；未登录为 null）</summary>
     public long? CurrentLoginRecordId => _currentLoginRecordId;
 
     /// <summary>
@@ -50,7 +50,7 @@ public class CurrentContext : ICurrentContext
     }
 
     /// <summary>
-    /// 记录当前登录写入 LoginRecords 表的记录 Id（登出时回填登出时间用）。
+    /// 记录当前登录写入 LoginConfig 表的记录 Id（登出时回填登出时间用）。
     /// </summary>
     /// <param name="loginRecordId">刚写入的登录记录主键 Id</param>
     public void SetCurrentLoginRecordId(long loginRecordId)

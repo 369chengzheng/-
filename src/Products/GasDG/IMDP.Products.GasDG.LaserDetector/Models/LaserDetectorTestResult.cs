@@ -9,7 +9,7 @@ namespace IMDP.Products.GasDG.LaserDetector.Models
     /// </summary>
     public sealed class LaserDetectorTestResult
     {
-        /// <summary>界面工位号 1～3</summary>
+        /// <summary>界面工位号（正整数，来源数据库方案配置）</summary>
         public int Station { get; set; }
         /// <summary>12V 电压，单位 V</summary>
         public double Voltage12V { get; set; }

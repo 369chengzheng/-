@@ -40,7 +40,7 @@ public interface IUserService
 
     /// <summary>
     /// 记录一条登录日志（登录成功与失败均调用）。
-    /// <para>写入 LoginRecords 表：登录工位、工号、本机 IP 地址、登录类型（鉴权渠道）、登录结果、
+    /// <para>写入 LoginConfig 表：登录工位、工号、本机 IP 地址、登录类型（鉴权渠道）、登录结果、
     /// 失败原因、软件版本号、登录时间；机器名/用户名/应用名由 SqlSugar AOP 自动填充。
     /// 写入失败仅吞掉异常，不阻断登录流程。</para>
     /// </summary>
@@ -49,15 +49,15 @@ public interface IUserService
     /// <param name="loginType">登录类型/鉴权渠道（见 <see cref="IMDP.Domain.Users.LoginTypeCodes"/>）</param>
     /// <param name="isSuccess">是否登录成功</param>
     /// <param name="errorInfo">失败原因（成功时传 null）</param>
-    /// <returns>刚写入的 LoginRecords 记录主键 Id（写入失败返回 0），供登出时回填登出时间</returns>
+    /// <returns>刚写入的 LoginConfig 记录主键 Id（写入失败返回 0），供登出时回填登出时间</returns>
     Task<long> RecordLoginAsync(string workNumber, string station, string loginType, bool isSuccess, string? errorInfo);
 
     /// <summary>
     /// 正常退出登录时回填登出时间。
-    /// <para>按登录记录 Id 更新 LoginRecords 表中对应记录的 LogoutTime 为当前时间；
+    /// <para>按登录记录 Id 更新 LoginConfig 表中对应记录的 LogoutTime 为当前时间；
     /// 记录不存在或已回填则忽略。写入失败仅吞掉异常，不阻断登出流程。</para>
     /// </summary>
-    /// <param name="loginRecordId">登录成功时写入的 LoginRecords 记录主键 Id</param>
+    /// <param name="loginRecordId">登录成功时写入的 LoginConfig 记录主键 Id</param>
     Task RecordLogoutAsync(long loginRecordId);
 
     /// <summary>分页查询用户列表</summary>

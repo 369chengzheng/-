@@ -63,10 +63,12 @@ public class LoginConfigRepository : Repository<LoginConfig>, ILoginConfigReposi
             query = query.Where(l => l.WorkNumber == workNumber);
 
         // 登录时间范围筛选
+        // DatePicker 仅含日期，时间部分为 00:00:00；为避免“截止选今天却查不出今天”的问题，
+        // 开始时间归一化到当日 00:00:00，截止时间归一化到当日 23:59:59.9999999。
         if (startTime.HasValue)
-            query = query.Where(l => l.LoginTime >= startTime.Value);
+            query = query.Where(l => l.LoginTime >= startTime.Value.Date);
         if (endTime.HasValue)
-            query = query.Where(l => l.LoginTime <= endTime.Value);
+            query = query.Where(l => l.LoginTime <= endTime.Value.Date.AddDays(1).AddTicks(-1));
 
         // 按登录时间倒序分页
         var items = await query.OrderByDescending(l => l.LoginTime)
@@ -79,5 +81,16 @@ public class LoginConfigRepository : Repository<LoginConfig>, ILoginConfigReposi
             PageIndex = pageIndex,
             PageSize = pageSize
         };
+    }
+
+    /// <summary>
+    /// 插入一条登录配置日志，并返回数据库分配的自增主键 Id。
+    /// </summary>
+    /// <param name="loginConfig">待插入的登录配置日志实体。</param>
+    /// <returns>数据库自增主键 Id（LoginConfig.Id 为 IsIdentity 自增列）。</returns>
+    public async Task<long> InsertReturnIdentityAsync(LoginConfig loginConfig)
+    {
+        // ExecuteReturnIdentityAsync 返回数据库自增主键
+        return await _db.Insertable(loginConfig).ExecuteReturnIdentityAsync();
     }
 }

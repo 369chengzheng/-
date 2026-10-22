@@ -14,6 +14,7 @@ public interface IBoardConfig : ISoftDeletable
     string MaterialNumber { get; set; }
     string ParametersJson { get; set; }
     int StationCount { get; set; }
+
     string CreatedBy { get; set; }
     DateTime CreatedTime { get; set; }
     string UpdatedBy { get; set; }
@@ -21,6 +22,10 @@ public interface IBoardConfig : ISoftDeletable
 
     /// <summary>产品类别（GasDG/GasOG/WaterDW/WaterOW），用于分表路由，不映射数据库物理列</summary>
     string Category { get; set; }
+    /// <summary>
+    /// 方案所属插件的稳定标识，NULL或空值表示尚未标记插件归属
+    /// </summary>
+    public string? ProductKey { get; set; }
 }
 
 /// <summary>整机配置实体通用接口（4 个产品 WholeConfig 实体共用）</summary>

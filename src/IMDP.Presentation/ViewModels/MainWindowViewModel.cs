@@ -8,6 +8,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Prism.Common;
 using Prism.Ioc;
 using Prism.Events;
 using IMDP.Application.DTOs;
@@ -420,7 +421,7 @@ public partial class MainWindowViewModel : ObservableObject
     /// </summary>
     private async void OnLogout()
     {
-        // 正常退出登录：回填本次登录写入 LoginRecords 表的登出时间（记录缺失则忽略）
+        // 正常退出登录：回填本次登录写入 LoginConfig 表的登出时间（记录缺失则忽略）
         if (_currentContext.CurrentLoginRecordId.HasValue)
         {
             try
@@ -440,13 +441,19 @@ public partial class MainWindowViewModel : ObservableObject
 
     /// <summary>
     /// 返回主页处理
-    /// <para>关闭菜单弹窗，清空主内容区域所有视图，再导航至主视图。</para>
+    /// <para>关闭菜单弹窗，通知当前页面离开，清空主内容区域所有视图，再导航至主视图。</para>
     /// </summary>
     private void OnGoHome()
     {
         IsMenuPopupOpen = false;
         // 移除主内容区域中所有现有视图，确保回到主视图时为干净状态
         var mainContentRegion = _regionManager.Regions["MainContentRegion"];
+        // 直接移除视图不会触发导航回调，先通知当前视图及其视图模型离开
+        var navigationContext = new NavigationContext(mainContentRegion.NavigationService, new Uri("MainView", UriKind.Relative));
+        foreach (var view in mainContentRegion.ActiveViews.ToList())
+        {
+            MvvmHelpers.ViewAndViewModelAction<INavigationAware>(view, page => page.OnNavigatedFrom(navigationContext));
+        }
         foreach (var view in mainContentRegion.Views.ToList())
         {
             mainContentRegion.Remove(view);

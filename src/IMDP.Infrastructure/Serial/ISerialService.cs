@@ -119,6 +119,17 @@ public interface ISerialService : IDisposable
     Task<byte[]?> SendAndWaitAsync(string portName, byte[] frame, int timeoutMs, int retryCount = 1, int sendDelayMs = 0);
 
     /// <summary>
+    /// 发送帧并等待响应（带帧格式：PreambleGapMs&gt;0 时前导与帧体分段发送）。
+    /// </summary>
+    /// <param name="portName">串口名称。</param>
+    /// <param name="frame">待发送的帧数据。</param>
+    /// <param name="format">帧格式配置（可空，空时不分段）。</param>
+    /// <param name="timeoutMs">单次等待响应超时（毫秒）。</param>
+    /// <param name="retryCount">重试次数，默认 1。</param>
+    /// <param name="sendDelayMs">发送前延迟（毫秒），默认 0。</param>
+    Task<byte[]?> SendAndWaitAsync(string portName, byte[] frame, IMDP.Domain.Products.FrameFormatConfig? format, int timeoutMs, int retryCount = 1, int sendDelayMs = 0);
+
+    /// <summary>
     /// 异步发送数据（不等待响应）。
     /// </summary>
     /// <param name="portName">串口名称。</param>

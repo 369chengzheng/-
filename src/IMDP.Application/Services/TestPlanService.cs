@@ -34,22 +34,30 @@ public class TestPlanService : ITestPlanService
     private readonly IWholeConfigAuditLogRepository _wholeConfigAuditLogRepo;
 
     /// <summary>
+    /// 当前登录工号及角色，新独立方案不使用硬编码账号
+    /// </summary>
+    private readonly ICurrentContext _currentContext;
+
+    /// <summary>
     /// 构造函数
     /// </summary>
     /// <param name="boardConfigRepo">板卡配置仓储</param>
     /// <param name="wholeConfigRepo">整机配置仓储</param>
     /// <param name="boardConfigAuditLogRepo">板卡配置审计日志仓储</param>
     /// <param name="wholeConfigAuditLogRepo">整机配置审计日志仓储</param>
+    /// <param name="currentContext">当前登录工号及角色</param>
     public TestPlanService(
         IBoardConfigRepository boardConfigRepo,
         IWholeConfigRepository wholeConfigRepo,
         IBoardConfigAuditLogRepository boardConfigAuditLogRepo,
-        IWholeConfigAuditLogRepository wholeConfigAuditLogRepo)
+        IWholeConfigAuditLogRepository wholeConfigAuditLogRepo,
+        ICurrentContext currentContext)
     {
         _boardConfigRepo = boardConfigRepo;
         _wholeConfigRepo = wholeConfigRepo;
         _boardConfigAuditLogRepo = boardConfigAuditLogRepo;
         _wholeConfigAuditLogRepo = wholeConfigAuditLogRepo;
+        _currentContext = currentContext;
     }
 
     /// <inheritdoc/>
@@ -175,6 +183,45 @@ public class TestPlanService : ITestPlanService
     }
 
     /// <inheritdoc/>
+    public async Task<TestPlanDto?> GetWholeConfigAsync(int planType, string productCode, string customerCode, string category,
+        string productKey, string materialNumber)
+    {
+        category = category.Trim();
+        productKey = productKey.Trim();
+        materialNumber = materialNumber.Trim();
+        productCode = productCode.Trim();
+        customerCode = customerCode.Trim();
+        var result = await _wholeConfigRepo.GetScopedAsync(planType, productCode, customerCode, category, productKey, materialNumber);
+        return result == null ? null : MapWholeConfigToDto(result, category);
+    }
+
+    /// <inheritdoc/>
+    public async Task<PagedResultDto<TestPlanDto>> GetWholeConfigsAsync(int planType, string productCodeKeyword, string customerCodeKeyword,
+        int pageIndex, int pageSize, string category, string productKey, string materialNumber)
+    {
+        category = category.Trim();
+        productKey = productKey.Trim();
+        materialNumber = materialNumber.Trim();
+        productCodeKeyword = productCodeKeyword?.Trim() ?? string.Empty;
+        customerCodeKeyword = customerCodeKeyword?.Trim() ?? string.Empty;
+        var result = await _wholeConfigRepo.GetScopedPagedAsync(planType, productCodeKeyword, customerCodeKeyword,
+            pageIndex, pageSize, category, productKey, materialNumber);
+        return new PagedResultDto<TestPlanDto>
+        {
+            Items = result.Items.Select(config => MapWholeConfigToDto(config, category)).ToList(),
+            TotalCount = result.TotalCount,
+            PageIndex = result.PageIndex,
+            PageSize = result.PageSize
+        };
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> DeleteWholeConfigAsync(long id, int planType, string productCode, string customerCode,
+        string category, string productKey, string materialNumber) =>
+        await _wholeConfigRepo.DeleteScopedAsync(id, planType, productCode.Trim(), customerCode.Trim(),
+            category.Trim(), productKey.Trim(), materialNumber.Trim(), _currentContext.UserName);
+
+    /// <inheritdoc/>
     /// <remarks>
     /// 路由策略：通过 <paramref name="category"/> 路由到对应物理表。
     /// </remarks>
@@ -245,6 +292,27 @@ public class TestPlanService : ITestPlanService
             await _wholeConfigAuditLogRepo.AddAsync(CreateWholeConfigAuditLog(category, config.Id, "INSERT", null, insertedJson, operatorWorkNumber));
         }
         return true;
+    }
+
+    /// <inheritdoc/>
+    public async Task<TestPlanDto> SaveWholeConfigAsync(int planType, string productCode, string customerCode, string category,
+        string productKey, string materialNumber, TestPlanDto plan)
+    {
+        var workNumber = _currentContext.UserName;
+        category = category.Trim();
+        productKey = productKey.Trim();
+        materialNumber = materialNumber.Trim();
+        productCode = productCode.Trim();
+        customerCode = customerCode.Trim();
+        if (plan.Category != category || plan.ProductKey != productKey ||
+            plan.MaterialNumber != materialNumber || plan.PlanType != planType ||
+            plan.ProductCode != productCode || plan.CustomerCode != customerCode)
+            throw new ArgumentException("方案与当前物料、类型或产品及客户编码不匹配。");
+        if (plan.StationCount < 1 || plan.Parameters == null || !plan.Parameters.Any(item => item.IsEnabled))
+            throw new ArgumentException("请提供有效工位数量及至少一个已启用项目。");
+        var result = await _wholeConfigRepo.SaveScopedAsync(planType, productCode, customerCode, category, productKey, materialNumber, plan.StationCount,
+            JsonConvert.SerializeObject(plan.Parameters), workNumber);
+        return MapWholeConfigToDto(result, category);
     }
 
     /// <inheritdoc/>
@@ -474,6 +542,7 @@ public class TestPlanService : ITestPlanService
             Id = config.Id,
             ProductCode = config.ProductCode,
             MaterialNumber = config.MaterialNumber,
+            ProductKey = config.ProductKey,
             Category = category,
             StationCount = config.StationCount,
             Parameters = JsonConvert.DeserializeObject<List<TestParameterDto>>(config.ParametersJson) ?? new List<TestParameterDto>(),
@@ -500,6 +569,7 @@ public class TestPlanService : ITestPlanService
             ProductCode = config.ProductCode,
             CustomerCode = config.CustomerCode,
             MaterialNumber = config.MaterialNumber,
+            ProductKey = config.ProductKey,
             Category = category,
             StationCount = config.StationCount,
             Parameters = JsonConvert.DeserializeObject<List<TestParameterDto>>(config.ParametersJson) ?? new List<TestParameterDto>(),

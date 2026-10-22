@@ -38,9 +38,6 @@ public static class LaserDetectorProtocolConstants
     /// <summary>测试结果响应数据域在帧中的起始偏移</summary>
     public const int TestResultDataOffset = 4;
 
-    /// <summary>协议支持的工位数上限（工位 1～3）</summary>
-    public const int StationCount = 3;
-
     /// <summary>判断字节是否为协议支持的工装响应指令位
     /// <para>仅 0xAB（开始测试响应）与 0xAD（测试结果响应）为合法响应。</para>
     /// </summary>

@@ -152,6 +152,14 @@ public class FrameFormatConfig
     public byte[]? PreambleSuffix { get; set; }
 
     /// <summary>
+    /// 前导发完后与帧体之间的间隔毫秒数（默认 0，即前导与帧体连续一次写出）。
+    /// <para>唤醒类设备常要求先收完整唤醒前导、留出处理间隔、再收有效帧体；
+    /// 发送侧按此值把帧拆成两段 Write（前导段 → 延时 → 帧体段）。
+    /// 前导总长 = Preamble×PreambleRepeat + PreambleSuffix；无前导时本值无效。</para>
+    /// </summary>
+    public int PreambleGapMs { get; set; }
+
+    /// <summary>
     /// 命令码即全部负载（默认 false）。
     /// <para>设为 true 时 <see cref="FrameComposer.BuildFrame"/> 把 command 首字节作为命令码写入命令字段，
     /// 且不再把 command 拷入数据区——适用于"单命令码帧"，如威星海外二代水表协议的

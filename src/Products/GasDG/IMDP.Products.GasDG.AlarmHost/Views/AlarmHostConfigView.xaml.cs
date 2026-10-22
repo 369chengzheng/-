@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using IMDP.Products.GasDG.AlarmHost.Models;
 using IMDP.Products.GasDG.AlarmHost.ViewModels;
 
@@ -8,13 +9,31 @@ namespace IMDP.Products.GasDG.AlarmHost.Views;
 
 public partial class AlarmHostConfigView : UserControl
 {
+    /// <summary>
+    /// 方案表格列宽变化的依赖属性描述器，用于订阅用户调节列宽
+    /// </summary>
     private static readonly DependencyPropertyDescriptor ColumnWidthDescriptor =
         DependencyPropertyDescriptor.FromProperty(DataGridColumn.WidthProperty, typeof(DataGridColumn))
         ?? throw new InvalidOperationException("无法获取表格列宽属性。");
+    /// <summary>
+    /// 当前页面已订阅变化通知的配置视图模型
+    /// </summary>
     private AlarmHostConfigViewModel? _viewModel;
+    /// <summary>
+    /// 当前页面已订阅密码变化通知的编辑草稿
+    /// </summary>
     private AlarmHostConfigDraft? _draft;
+    /// <summary>
+    /// 是否正在将草稿密码同步到 PasswordBox，用于避免回写时重入
+    /// </summary>
     private bool _syncingPassword;
+    /// <summary>
+    /// 当前是否已经订阅方案表格各列的宽度变化事件
+    /// </summary>
     private bool _columnWidthsAttached;
+    /// <summary>
+    /// 是否正在更新方案表格宽度，用于避免布局回调重入
+    /// </summary>
     private bool _updatingSchemeWidth;
 
     public AlarmHostConfigView()
@@ -75,12 +94,12 @@ public partial class AlarmHostConfigView : UserControl
 
     private void DraftChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(AlarmHostConfigDraft.NetworkPassword)) SyncPassword();
+        if (e.PropertyName == nameof(AlarmHostConfigDraft.Items)) SyncPassword();
     }
 
     private void SyncPassword()
     {
-        var password = _draft?.NetworkPassword ?? "";
+        var password = _draft?.Items[AlarmHostFunctionCatalog.MainNetwork].Values["Password"].Value ?? "";
         if (NetworkPasswordInput.Password == password) return;
         _syncingPassword = true;
         try { NetworkPasswordInput.Password = password; }
@@ -89,7 +108,7 @@ public partial class AlarmHostConfigView : UserControl
 
     private void NetworkPasswordChanged(object sender, RoutedEventArgs e)
     {
-        if (!_syncingPassword && _draft != null) _draft.NetworkPassword = NetworkPasswordInput.Password;
+        if (!_syncingPassword && _draft != null) _draft.Items[AlarmHostFunctionCatalog.MainNetwork].Values["Password"].Value = NetworkPasswordInput.Password;
     }
 
     private void ParameterScrollChanged(object sender, ScrollChangedEventArgs e)
@@ -150,10 +169,13 @@ public partial class AlarmHostConfigView : UserControl
 
     private void UpdatePlanColumns()
     {
-        var visibility = _viewModel?.IsInspectionPlan == true ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var column in new[] { ImeiColumn, ImsiColumn, IccidColumn, CsqColumn,
-                     VersionColumn, BluetoothSnOrSparkMacColumn, BluetoothBroadcastColumn })
-            column.Visibility = visibility;
+        foreach (var column in SchemeGrid.Columns.OfType<DataGridTextColumn>())
+        {
+            if (column.Binding is not Binding { Path.Path: var path } || !path.StartsWith("Items[", StringComparison.Ordinal)) continue;
+            var key = path[6..^1];
+            column.Visibility = AlarmHostFunctionCatalog.Get(key).InspectionOnly && _viewModel?.IsInspectionPlan != true
+                ? Visibility.Collapsed : Visibility.Visible;
+        }
         UpdateSchemeWidth();
     }
 

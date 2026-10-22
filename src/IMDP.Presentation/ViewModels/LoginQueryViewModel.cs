@@ -2,7 +2,7 @@
 // 文件名：LoginQueryViewModel.cs
 // 功能描述：登录日志查询视图模型（4.15 模块）。
 //           按工号精确匹配 + 登录时间范围分页查询用户登录记录，展示工位、工号、软件版本号、
-//           登录时间、登出时间等字段，严格参考数据库表 LoginRecords 字段设计。
+//           登录时间、登出时间等字段，严格参考数据库表 LoginConfig 字段设计。
 //           继承 PaginationViewModelBase<LoginRecordDto>，复用分页状态与翻页命令，仅实现 RefreshAsync()。
 // =============================================================================
 using System.Collections.ObjectModel;

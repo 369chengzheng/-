@@ -1,7 +1,7 @@
 <!-- =============================================================================
      文件名：LoginQueryView.xaml
      功能描述：登录日志查询视图（4.15 模块）。以分页表格形式展示用户登录记录，
-               支持按工号（精确匹配）+ 登录时间范围查询，列字段严格参考数据库表 Logins。
+               支持按工号（精确匹配）+ 登录时间范围查询，列字段严格参考数据库表 LoginConfig。
      ============================================================================= -->
 <UserControl x:Class="IMDP.Presentation.Views.LoginQueryView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -47,6 +47,8 @@
                     <DataGrid.Columns>
                         <DataGridTextColumn Header="工位" Binding="{Binding Station}" Width="130"/>
                         <DataGridTextColumn Header="工号" Binding="{Binding WorkNumber}" Width="120"/>
+                        <DataGridTextColumn Header="机器名" Binding="{Binding ComputerName}" Width="130"/>
+                        <DataGridTextColumn Header="系统用户名" Binding="{Binding UserName}" Width="120"/>
                         <DataGridTextColumn Header="IP地址" Binding="{Binding IpAddress}" Width="120"/>
                         <DataGridTextColumn Header="登录类型" Binding="{Binding LoginType}" Width="90"/>
                         <DataGridTextColumn Header="登录结果" Binding="{Binding LoginResult}" Width="90"/>

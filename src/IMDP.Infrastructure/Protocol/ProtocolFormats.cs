@@ -73,6 +73,7 @@ public static class ProtocolFormats
         CommandIsPayload = source.CommandIsPayload,
         CommandMatchMask = source.CommandMatchMask,
         FixedFrameLength = source.FixedFrameLength,
-        ChecksumType = source.ChecksumType
+        ChecksumType = source.ChecksumType,
+        PreambleGapMs = source.PreambleGapMs
     };
 }

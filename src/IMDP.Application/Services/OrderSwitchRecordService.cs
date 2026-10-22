@@ -2,7 +2,9 @@
 // 文件名：OrderSwitchRecordService.cs
 // 功能描述：工单切换记录写入服务实现
 // =============================================================================
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Unicode;
 using IMDP.Application.DTOs;
 using IMDP.Domain.Entities;
 using IMDP.Domain.Interfaces;
@@ -16,6 +18,14 @@ namespace IMDP.Application.Services;
 /// </summary>
 public sealed class OrderSwitchRecordService : IOrderSwitchRecordService
 {
+    /// <summary>
+    /// 仅工单菜单 JSON 保留中文，必要的引号、反斜线和控制字符仍按 JSON 规则转义
+    /// </summary>
+    private static readonly JsonSerializerOptions MenuJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+    };
+
     private readonly IOrderSwitchRepository _orderSwitchRepository;
     private readonly SemaphoreSlim _writeGate = new(1, 1);
     private readonly object _stateLock = new();
@@ -82,7 +92,7 @@ public sealed class OrderSwitchRecordService : IOrderSwitchRecordService
             {
                 OrderNumber = orderNumber,
                 MaterialNumber = materialNumber,
-                LoadedMenusJson = JsonSerializer.Serialize(menuNames),
+                LoadedMenusJson = JsonSerializer.Serialize(menuNames, MenuJsonOptions),
                 CreatedBy = createdBy,
                 CreatedTime = createdTime
             });

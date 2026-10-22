@@ -79,7 +79,7 @@ public sealed class SerialSession
         _rxBuffer.Clear();   // 清掉上一次的残留，避免污染本次响应解析
         var effective = _formatOverrideCurrent ?? _format;
         var frame = FrameComposer.BuildFrame(effective, deviceAddress, payload);
-        var raw = await _serial.SendAndWaitAsync(_portName, frame, timeoutMs, retryCount, 0);
+        var raw = await _serial.SendAndWaitAsync(_portName, frame, effective, timeoutMs, retryCount, 0);
         if (raw == null || raw.Length == 0)
         {
             LastError = "无响应（超时或串口未开）";

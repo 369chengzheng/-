@@ -119,7 +119,7 @@ public partial class LoginViewModel : ObservableObject, INavigationAware
             // 登录成功记入日志（工位 + 工号 + 姓名 + 角色）
             _logger.Info($"登录成功：工位={Station}，工号={user.WorkNumber}，姓名={user.Name}，角色={user.Role}");
 
-            // 3) 记录登录日志到 LoginRecords 表（工位/工号/IP/登录类型/登录结果/登录时间；写入失败不阻断登录）
+            // 3) 记录登录日志到 LoginConfig 表（工位/工号/IP/登录类型/登录结果/登录时间；写入失败不阻断登录）
             //    保存返回的记录 Id，供正常退出登录时回填登出时间
             var loginRecordId = await _userService.RecordLoginAsync(user.WorkNumber, Station, LoginTypeCodes.Mes, true, null);
             if (loginRecordId > 0)

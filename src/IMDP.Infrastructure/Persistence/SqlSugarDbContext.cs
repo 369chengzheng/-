@@ -94,17 +94,11 @@ public class SqlSugarDbContext : IDbContext
         _db.CodeFirst.InitTables(
             typeof(User),
             typeof(MaterialProductMap),
-            typeof(Login),
             typeof(LoginConfig),
             typeof(OrderSwitch),
             typeof(GlobalConfig),
             typeof(AppUpdateRecord)
         );
-
-        // 补齐 Logins 表中后增但旧版数据库可能缺失的 4 个列。
-        // 使用 IF COL_LENGTH(...) IS NULL 包裹，确保列不存在时才 ALTER TABLE ADD，
-        // 幂等可重复执行，不影响已有列与数据。
-        await EnsureLoginsTableColumnsAsync();
 
         // 创建分表物理表（4 个产品类别 × 6 个分表实体 = 24 张物理表）
         CreateSplitTables();
@@ -187,33 +181,6 @@ public class SqlSugarDbContext : IDbContext
     }
 
     /// <summary>
-    /// 安全补齐 Logins 表缺失的后增列（IpAddress / LoginType / LoginResult / ErrorInfo）。
-    /// <para>仅在列不存在时执行 ALTER TABLE ADD，幂等执行不报错，不修改已有列或数据。</para>
-    /// </summary>
-    private async Task EnsureLoginsTableColumnsAsync()
-    {
-        var sql = new System.Text.StringBuilder();
-
-        // IpAddress NVARCHAR(255) NULL
-        sql.Append("IF OBJECT_ID('dbo.LoginRecords', 'U') IS NOT NULL AND COL_LENGTH('dbo.LoginRecords', 'IpAddress') IS NULL ");
-        sql.Append("ALTER TABLE dbo.LoginRecords ADD IpAddress NVARCHAR(255) NULL; ");
-
-        // LoginType NVARCHAR(255) NULL
-        sql.Append("IF OBJECT_ID('dbo.LoginRecords', 'U') IS NOT NULL AND COL_LENGTH('dbo.LoginRecords', 'LoginType') IS NULL ");
-        sql.Append("ALTER TABLE dbo.LoginRecords ADD LoginType NVARCHAR(255) NULL; ");
-
-        // LoginResult NVARCHAR(255) NULL
-        sql.Append("IF OBJECT_ID('dbo.LoginRecords', 'U') IS NOT NULL AND COL_LENGTH('dbo.LoginRecords', 'LoginResult') IS NULL ");
-        sql.Append("ALTER TABLE dbo.LoginRecords ADD LoginResult NVARCHAR(255) NULL; ");
-
-        // ErrorInfo NVARCHAR(255) NULL
-        sql.Append("IF OBJECT_ID('dbo.LoginRecords', 'U') IS NOT NULL AND COL_LENGTH('dbo.LoginRecords', 'ErrorInfo') IS NULL ");
-        sql.Append("ALTER TABLE dbo.LoginRecords ADD ErrorInfo NVARCHAR(255) NULL; ");
-
-        await _db.Ado.ExecuteCommandAsync(sql.ToString());
-    }
-
-    /// <summary>
     /// 创建分表物理表。
     /// <para>分表实体（BoardConfig/WholeConfig/Boards/Wholes 及审计日志）使用 AS(tableName)
     /// 动态路由到 {Category}{基表名} 物理表，需按 4 个产品类别分别创建物理表。</para>
@@ -236,21 +203,27 @@ public class SqlSugarDbContext : IDbContext
         // 4 个产品类别前缀
         var categories = new[] { "GasDG", "GasOG", "WaterDW", "WaterOW" };
 
-        foreach (var category in categories)
+        // 结构同步失败也收回临时映射
+        try
         {
-            foreach (var type in splitTableTypes)
+            foreach (var category in categories)
             {
+                foreach (var type in splitTableTypes)
+                {
                 // 类名即基表名（实体类命名与 [SugarTable] 表名一致）
-                var physicalTableName = $"{category}{type.Name}";
+                    var physicalTableName = $"{category}{type.Name}";
 
                 // 临时映射实体名到物理表名后建表（表已存在时 InitTables 自动跳过创建）
-                _db.MappingTables.Add(type.Name, physicalTableName);
-                _db.CodeFirst.InitTables(type);
+                    _db.MappingTables.Add(type.Name, physicalTableName);
+                    _db.CodeFirst.InitTables(type);
+                }
             }
         }
-
-        // 清理映射表，避免影响后续 AS 动态路由查询
-        _db.MappingTables.Clear();
+        finally
+        {
+            // 清理映射表，避免影响后续 AS 动态路由查询
+            _db.MappingTables.Clear();
+        }
     }
 
     /// <summary>
@@ -263,9 +236,6 @@ public class SqlSugarDbContext : IDbContext
         var commonIndexes = new[]
         {
             ("MaterialProductMaps", "IX_MaterialProductMaps_MaterialNumber", "MaterialNumber"),
-            ("LoginRecords", "IX_LoginRecords_WorkNumber", "WorkNumber"),
-            ("LoginRecords", "IX_LoginRecords_LoginTime", "LoginTime"),
-            ("LoginRecords", "IX_LoginRecords_Station", "Station"),
             ("LoginConfig", "IX_LoginConfig_WorkNumber", "WorkNumber"),
             ("LoginConfig", "IX_LoginConfig_LoginTime", "LoginTime"),
             ("LoginConfig", "IX_LoginConfig_Station", "Station"),
@@ -301,6 +271,7 @@ public class SqlSugarDbContext : IDbContext
         };
 
         var sql = new System.Text.StringBuilder();
+        sql.Append(WholeConfigRepository.ScopedWriteOptions);
 
         // 通用表索引
         foreach (var (table, indexName, column) in commonIndexes)
@@ -331,6 +302,13 @@ public class SqlSugarDbContext : IDbContext
                 sql.Append($"CREATE INDEX {indexName} ON {tableName}({column}); ");
             }
         }
+
+        //用户审核的最小范围唯一索引，只约束已归属插件
+        //暂时只开放给dbo.GasDGWholeConfig，国内燃气整机
+        //同插件＋同物料号＋同方案类型＋同产品编码＋同客户编码，只允许一份有效方案
+        //只约束未软删除、且 ProductKey 有值
+        sql.Append("IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'UX_GasDGWholeConfig_PluginScope_Active' AND object_id = OBJECT_ID('dbo.GasDGWholeConfig')) ");
+        sql.Append("CREATE UNIQUE INDEX UX_GasDGWholeConfig_PluginScope_Active ON dbo.GasDGWholeConfig(ProductKey, MaterialNumber, PlanType, ProductCode, CustomerCode) WHERE IsDeleted = 0 AND ProductKey IS NOT NULL AND ProductKey <> N''; ");
 
         await _db.Ado.ExecuteCommandAsync(sql.ToString());
     }

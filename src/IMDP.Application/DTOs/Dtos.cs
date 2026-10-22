@@ -286,6 +286,13 @@ public class TestPlanDto
     /// <summary>工位数量</summary>
     public int StationCount { get; set; }
 
+    /// <summary>
+    /// 单工位检测最大超时时间（秒，默认 120）
+    /// <para>约束该工位从下发开始测试指令到收到结果帧的总耗时，
+    /// 0 或负值时按默认值处理；由检测服务在轮询结果时执行。</para>
+    /// </summary>
+    public int MaxTestTimeoutSeconds { get; set; } = 120;
+
     /// <summary>测试参数列表，详见 <see cref="TestParameterDto"/></summary>
     public List<TestParameterDto> Parameters { get; set; } = new();
 
@@ -303,6 +310,10 @@ public class TestPlanDto
 
     /// <summary>操作类型（INSERT/UPDATE/DELETE，仅在历史记录查询时填充）</summary>
     public string OperationType { get; set; } = string.Empty;
+    /// <summary>
+    /// 方案所属插件的稳定标识，NULL或空值表示尚未标记插件归属
+    /// </summary>
+    public string? ProductKey { get; set; }
 }
 
 /// <summary>
@@ -396,8 +407,8 @@ public class ProductPluginDto
 
 /// <summary>
 /// 登录记录 DTO
-/// <para>对应 <see cref="IMDP.Domain.Entities.Login"/> 实体，用于登录日志查询界面展示。</para>
-/// <para>严格参考数据库表 LoginRecords 字段设计：工位、工号、IP 地址、登录类型、登录结果、失败原因、软件版本号、登录时间、登出时间、机器名、系统用户名、应用名称。</para>
+/// <para>对应 <see cref="IMDP.Domain.Entities.LoginConfig"/> 实体，用于登录日志查询界面展示。</para>
+/// <para>严格参考数据库表 LoginConfig 字段设计：工位、工号、IP 地址、登录类型、登录结果、失败原因、软件版本号、登录时间、登出时间、机器名、系统用户名、应用名称。</para>
 /// </summary>
 public class LoginRecordDto
 {
@@ -430,6 +441,15 @@ public class LoginRecordDto
 
     /// <summary>登出时间（可空，用户登出时回填）</summary>
     public DateTime? LogoutTime { get; set; }
+
+    /// <summary>机器名（记录写入时的本机 NetBIOS 名，由 SqlSugar AOP 自动填充）</summary>
+    public string ComputerName { get; set; } = string.Empty;
+
+    /// <summary>系统用户名（记录写入时的 Windows 登录用户名，由 SqlSugar AOP 自动填充）</summary>
+    public string UserName { get; set; } = string.Empty;
+
+    /// <summary>应用名称（记录写入时的客户端应用名称，由 SqlSugar AOP 自动填充，可空）</summary>
+    public string? AppName { get; set; }
 }
 
 /// <summary>

@@ -168,7 +168,13 @@ public class SerialService : ISerialService
     /// <param name="retryCount">重试次数，默认 1。</param>
     /// <param name="sendDelayMs">发送前延迟（毫秒），默认 0。</param>
     /// <returns>接收到的响应数据；超时或失败返回 null。</returns>
-    public async Task<byte[]?> SendAndWaitAsync(string portName, byte[] frame, int timeoutMs, int retryCount = 1, int sendDelayMs = 0)
+    public Task<byte[]?> SendAndWaitAsync(string portName, byte[] frame, int timeoutMs, int retryCount = 1, int sendDelayMs = 0)
+        => SendAndWaitAsync(portName, frame, null, timeoutMs, retryCount, sendDelayMs);
+
+    /// <summary>
+    /// 发送帧并等待响应（带帧格式：PreambleGapMs>0 时前导与帧体分段发送）。
+    /// </summary>
+    public async Task<byte[]?> SendAndWaitAsync(string portName, byte[] frame, IMDP.Domain.Products.FrameFormatConfig? format, int timeoutMs, int retryCount = 1, int sendDelayMs = 0)
     {
         if (!_ports.TryGetValue(portName, out var wrapper) || !wrapper.IsOpen)
             return null;
@@ -180,7 +186,8 @@ public class SerialService : ISerialService
             TimeoutMs = timeoutMs,
             RetryCount = retryCount,
             SendDelayMs = sendDelayMs,
-            CompletionSource = new TaskCompletionSource<byte[]?>()
+            Format = format,
+            CompletionSource = new TaskCompletionSource<byte[]?>(TaskCreationOptions.RunContinuationsAsynchronously)
         };
 
         _commandQueues[portName].Enqueue(request);
@@ -223,6 +230,37 @@ public class SerialService : ISerialService
     }
 
     /// <summary>
+    /// 计算帧格式的前导总长（Preamble×Repeat + PreambleSuffix）；无前导返回 0。
+    /// </summary>
+    private static int GetPreambleLength(IMDP.Domain.Products.FrameFormatConfig? format)
+    {
+        if (format?.Preamble == null || format.PreambleRepeat <= 0) return 0;
+        return format.Preamble.Length * format.PreambleRepeat + (format.PreambleSuffix?.Length ?? 0);
+    }
+
+    /// <summary>
+    /// 按帧格式写出数据：前导与帧体之间有 PreambleGapMs 间隔时分两段写（唤醒类设备需要）。
+    /// </summary>
+    private static async Task WriteFrameWithPreambleGapAsync(
+        System.IO.Ports.SerialPort port, byte[] frame,
+        IMDP.Domain.Products.FrameFormatConfig? format,
+        CancellationToken token)
+    {
+        int preambleLen = GetPreambleLength(format);
+        if (preambleLen <= 0 || (format?.PreambleGapMs ?? 0) <= 0 || preambleLen >= frame.Length)
+        {
+            await port.BaseStream.WriteAsync(frame, 0, frame.Length, token).ConfigureAwait(false);
+            return;
+        }
+
+        // 前导段 → 间隔 → 帧体段
+        await port.BaseStream.WriteAsync(frame, 0, preambleLen, token).ConfigureAwait(false);
+        await port.BaseStream.FlushAsync(token).ConfigureAwait(false);
+        await Task.Delay(format!.PreambleGapMs, token).ConfigureAwait(false);
+        await port.BaseStream.WriteAsync(frame, preambleLen, frame.Length - preambleLen, token).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// 执行单条命令（含重试逻辑）。
     /// </summary>
     /// <param name="portName">串口名称。</param>
@@ -241,7 +279,7 @@ public class SerialService : ISerialService
                     await Task.Delay(request.SendDelayMs);
 
                 LogCommunication(portName, CommunicationDirection.Send, request.Frame, $"发送(第{attempt + 1}次)");
-                await wrapper.Port.BaseStream.WriteAsync(request.Frame, 0, request.Frame.Length, _disposeCts.Token);
+                await WriteFrameWithPreambleGapAsync(wrapper.Port, request.Frame, request.Format, _disposeCts.Token);
 
                 // 等待响应数据
                 var response = await wrapper.WaitForDataAsync(request.TimeoutMs, _disposeCts.Token);
@@ -542,6 +580,8 @@ public class SerialService : ISerialService
         public int SendDelayMs { get; set; }
         /// <summary>用于异步返回响应的 TaskCompletionSource。</summary>
         public TaskCompletionSource<byte[]?> CompletionSource { get; set; } = null!;
+        /// <summary>可选帧格式：提供时按 PreambleGapMs 分段发送。</summary>
+        public IMDP.Domain.Products.FrameFormatConfig? Format { get; set; }
     }
 
     /// <summary>

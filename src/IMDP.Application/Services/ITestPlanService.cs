@@ -57,6 +57,20 @@ public interface ITestPlanService
     /// <returns>整机配置 DTO；不存在返回 null</returns>
     Task<TestPlanDto?> GetWholeConfigAsync(int planType, string productCode, string customerCode, string category);
 
+    /// <summary>
+    /// 读取已按物料和插件隔离的整机方案，返回公共 DTO
+    /// </summary>
+    /// <param name="planType">方案类型（0=设置，1=检验）</param>
+    /// <param name="productCode">产品编码（精确匹配）</param>
+    /// <param name="customerCode">客户编码（精确匹配）</param>
+    /// <param name="category">产品类别（GasDG/GasOG/WaterDW/WaterOW，用于路由到对应方案表）</param>
+    /// <param name="productKey">插件标识（如 GasDG.AlarmHost，用于隔离不同插件的方案）</param>
+    /// <param name="materialNumber">软件物料号（精确匹配）</param>
+    /// <returns>整机配置 DTO；不存在返回 null</returns>
+    Task<TestPlanDto?> GetWholeConfigAsync(int planType, string productCode, string customerCode, string category,
+        string productKey, string materialNumber);
+
+
     /// <summary>分页查询整机配置</summary>
     /// <param name="planType">计划类型筛选（null 则不按类型筛选）</param>
     /// <param name="productCodeKeyword">产品编码模糊关键字</param>
@@ -66,6 +80,21 @@ public interface ITestPlanService
     /// <param name="category">产品类别（GasDG/GasOG/WaterDW/WaterOW，用于路由到对应产品仓储）</param>
     /// <returns>分页结果</returns>
     Task<PagedResultDto<TestPlanDto>> GetWholeConfigsAsync(int? planType, string productCodeKeyword, string customerCodeKeyword, int pageIndex, int pageSize, string category);
+
+    /// <summary>
+    /// 查询当前插件、物料和方案类型的有效方案，编码为空时不按该字段筛选
+    /// </summary>
+    /// <param name="planType">方案类型（0=设置，1=检验）</param>
+    /// <param name="productCodeKeyword">产品编码模糊关键字，可为空</param>
+    /// <param name="customerCodeKeyword">客户编码模糊关键字，可为空</param>
+    /// <param name="pageIndex">页码，从1开始</param>
+    /// <param name="pageSize">每页条数</param>
+    /// <param name="category">产品类别，用于路由到对应方案表</param>
+    /// <param name="productKey">插件标识，精确匹配</param>
+    /// <param name="materialNumber">软件物料号，精确匹配</param>
+    /// <returns>匹配的有效方案分页结果，按更新时间及主键倒序排列</returns>
+    Task<PagedResultDto<TestPlanDto>> GetWholeConfigsAsync(int planType, string productCodeKeyword, string customerCodeKeyword,
+        int pageIndex, int pageSize, string category, string productKey, string materialNumber);
 
     /// <summary>
     /// 保存整机配置（新增或更新）
@@ -78,6 +107,20 @@ public interface ITestPlanService
     Task<bool> SaveWholeConfigAsync(TestPlanDto plan, string operatorWorkNumber);
 
     /// <summary>
+    /// 按完整范围新增或维护独立整机方案，返回保存后的公共 DTO
+    /// </summary>
+    /// <param name="planType">方案类型（0=设置，1=检验）</param>
+    /// <param name="productCode">产品编码（精确匹配）</param>
+    /// <param name="customerCode">客户编码（精确匹配）</param>
+    /// <param name="category">产品类别（GasDG/GasOG/WaterDW/WaterOW，用于路由到对应方案表）</param>
+    /// <param name="productKey">插件标识（如 GasDG.AlarmHost，用于隔离不同插件的方案）</param>
+    /// <param name="materialNumber">软件物料号（精确匹配）</param>
+    /// <param name="plan">待保存的方案数据，定位字段须与上述参数一致</param>
+    /// <returns>新增或维护后的整机配置 DTO</returns>
+    Task<TestPlanDto> SaveWholeConfigAsync(int planType, string productCode, string customerCode, string category,
+        string productKey, string materialNumber, TestPlanDto plan);
+
+    /// <summary>
     /// 删除整机配置
     /// <para>先写 DELETE 审计日志（含删除数据快照），再执行物理删除。</para>
     /// </summary>
@@ -86,6 +129,20 @@ public interface ITestPlanService
     /// <param name="category">产品类别（GasDG/GasOG/WaterDW/WaterOW，用于路由到对应产品仓储与审计日志仓储）</param>
     /// <returns>是否删除成功（配置不存在返回 false）</returns>
     Task<bool> DeleteWholeConfigAsync(long id, string operatorWorkNumber, string category);
+
+    /// <summary>
+    /// 按主键及完整范围软删除整机方案，使用当前工号记录同事务审计
+    /// </summary>
+    /// <param name="id">选中方案的主键</param>
+    /// <param name="planType">方案类型（0=设置，1=检验）</param>
+    /// <param name="productCode">选中方案的产品编码</param>
+    /// <param name="customerCode">选中方案的客户编码</param>
+    /// <param name="category">产品类别</param>
+    /// <param name="productKey">插件标识</param>
+    /// <param name="materialNumber">软件物料号</param>
+    /// <returns>是否删除成功，不存在或已删除时返回false</returns>
+    Task<bool> DeleteWholeConfigAsync(long id, int planType, string productCode, string customerCode,
+        string category, string productKey, string materialNumber);
 
     /// <summary>分页查询板卡配置变更历史（基于审计日志）</summary>
     /// <param name="productCodeKeyword">产品编码模糊关键字</param>

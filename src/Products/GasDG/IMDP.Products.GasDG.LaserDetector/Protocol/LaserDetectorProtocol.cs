@@ -17,7 +17,7 @@ namespace IMDP.Products.GasDG.LaserDetector.Protocol
         /// <summary>
         /// 创建指定工位的开始测试指令
         /// </summary>
-        /// <param name="station">界面工位号，取值范围为 1～3</param>
+        /// <param name="station">界面工位号（正整数，来源数据库方案配置）</param>
         /// <param name="config">当前产品的激光检测配置</param>
         /// <returns>完整的开始测试指令字节数组</returns>
         /// <exception cref="ArgumentOutOfRangeException">工位号或测试方式超出协议范围时抛出</exception>
@@ -54,7 +54,7 @@ namespace IMDP.Products.GasDG.LaserDetector.Protocol
         /// <summary>
         /// 创建指定工位的查询测试结果指令
         /// </summary>
-        /// <param name="station">界面工位号，取值范围为 1～3</param>
+        /// <param name="station">界面工位号（正整数，来源数据库方案配置）</param>
         /// <returns>完整的查询测试结果指令字节数组</returns>
         /// <exception cref="ArgumentOutOfRangeException">工位号超出协议范围时抛出</exception>
         public static byte[] CreateQueryTestResultCommand(int station)
@@ -370,14 +370,14 @@ namespace IMDP.Products.GasDG.LaserDetector.Protocol
         /// <summary>
         /// 将界面工位号转换为协议工位值
         /// </summary>
-        /// <param name="station">界面工位号，取值范围为 1～3</param>
-        /// <returns>协议工位值 0x00～0x02</returns>
-        /// <exception cref="ArgumentOutOfRangeException">工位号超出协议范围时抛出</exception>
+        /// <param name="station">界面工位号（正整数，来源数据库方案配置）</param>
+        /// <returns>协议工位值（station - 1 的字节表示）</returns>
+        /// <exception cref="ArgumentOutOfRangeException">工位号超出字节表示范围时抛出</exception>
         private static byte GetProtocolStation(int station)
         {
-            if (station < 1 || station > LaserDetectorProtocolConstants.StationCount)
+            if (station < 1 || station > 255)
             {
-                throw new ArgumentOutOfRangeException(nameof(station), station, "工位号必须为 1、2 或 3。");
+                throw new ArgumentOutOfRangeException(nameof(station), station, "工位号必须在 1～255 范围内。");
             }
 
             return (byte)(station - 1);

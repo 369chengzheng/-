@@ -29,7 +29,6 @@ public class UserService : IUserService
 {
     /// <summary>用户仓储，用于读写 User 表</summary>
     private readonly IUserRepository _userRepository;
-    private readonly ILoginRepository _loginRepository;
     private readonly ILoginConfigRepository _loginConfigRepository;
     private readonly ICurrentContext _currentContext;
     private readonly IEventAggregator _eventAggregator;
@@ -39,15 +38,13 @@ public class UserService : IUserService
     /// 构造函数
     /// </summary>
     /// <param name="userRepository">用户仓储（由 DI 注入）</param>
-    /// <param name="loginRepository">登录记录仓储（写入 LoginRecords 表，由 DI 注入）</param>
     /// <param name="loginConfigRepository">登录配置日志仓储（写入 LoginConfig 表，由 DI 注入）</param>
     /// <param name="currentContext">当前上下文（SqlSugar AOP 审计字段填充用，由 DI 注入）</param>
     /// <param name="eventAggregator">事件聚合器（发布登录成功事件，由 DI 注入）</param>
     /// <param name="mesService">MES 服务（用于登录鉴权，由 DI 注入）</param>
-    public UserService(IUserRepository userRepository, ILoginRepository loginRepository, ILoginConfigRepository loginConfigRepository, ICurrentContext currentContext, IEventAggregator eventAggregator, IMesService mesService)
+    public UserService(IUserRepository userRepository, ILoginConfigRepository loginConfigRepository, ICurrentContext currentContext, IEventAggregator eventAggregator, IMesService mesService)
     {
         _userRepository = userRepository;
-        _loginRepository = loginRepository;
         _loginConfigRepository = loginConfigRepository;
         _currentContext = currentContext;
         _eventAggregator = eventAggregator;
@@ -97,12 +94,15 @@ public class UserService : IUserService
             var softVer = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? string.Empty;
             var ipAddress = GetLocalIpv4();
             var loginResult = isSuccess ? "成功" : "失败";
-            var errorInfoValue = isSuccess ? null : errorInfo;
+            // LoginConfig.ErrorInfo 列长 500，超长错误信息截断，避免插入失败导致整条登录日志丢失
+            var errorInfoValue = isSuccess || string.IsNullOrEmpty(errorInfo)
+                ? null
+                : (errorInfo.Length > 500 ? errorInfo.Substring(0, 500) : errorInfo);
 
 
-            // 写入 LoginRecords 表（用户登录记录，登录成功与失败均记录）
+            // 写入 LoginConfig 表（登录日志，登录成功与失败均记录）
             // 使用返回自增主键的插入方法，供登出时回填登出时间
-            var login = new Login
+            var loginConfig = new LoginConfig
             {
                 Station = station,
                 WorkNumber = workNumber,
@@ -112,22 +112,9 @@ public class UserService : IUserService
                 ErrorInfo = errorInfoValue,
                 SoftVer = softVer,
                 LoginTime = loginTime
+                // ComputerName/UserName/AppName 由 SqlSugar AOP 自动填充
             };
-            var loginRecordId = await _loginRepository.InsertReturnIdentityAsync(login);
-
-            // 写入 LoginConfig 表（登录配置日志表）
-            await _loginConfigRepository.AddAsync(new LoginConfig
-            {
-                Station = station,
-                WorkNumber = workNumber,
-                IpAddress = ipAddress,
-                LoginType = loginType,
-                LoginResult = loginResult,
-                ErrorInfo = errorInfoValue,
-                SoftVer = softVer,
-                LoginTime = loginTime
-                // ComputerName/UserName/AppName 由 SqlSugar AOP 自动填充（来自 ICurrentContext）
-            });
+            var loginRecordId = await _loginConfigRepository.InsertReturnIdentityAsync(loginConfig);
 
             // 返回刚写入的登录记录主键 Id，供登出时回填登出时间
             return loginRecordId;
@@ -146,12 +133,12 @@ public class UserService : IUserService
 
         try
         {
-            // 按 Id 取回本次登录写入的 LoginRecords 记录，回填登出时间（仅当尚未回填时）
-            var login = await _loginRepository.GetByIdAsync(loginRecordId);
-            if (login != null && login.LogoutTime == null)
+            // 按 Id 取回本次登录写入的 LoginConfig 记录，回填登出时间（仅当尚未回填时）
+            var loginConfig = await _loginConfigRepository.GetByIdAsync(loginRecordId);
+            if (loginConfig != null && loginConfig.LogoutTime == null)
             {
-                login.LogoutTime = DateTime.Now;
-                await _loginRepository.UpdateAsync(login);
+                loginConfig.LogoutTime = DateTime.Now;
+                await _loginConfigRepository.UpdateAsync(loginConfig);
             }
         }
         catch

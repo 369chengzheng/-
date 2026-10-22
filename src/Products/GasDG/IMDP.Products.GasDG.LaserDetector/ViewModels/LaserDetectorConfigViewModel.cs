@@ -29,10 +29,16 @@ namespace IMDP.Products.GasDG.LaserDetector.ViewModels;
 /// </summary>
 public partial class LaserDetectorConfigViewModel : ObservableObject, INavigationAware
 {
+    #region 字段
+
     private readonly ITestPlanService _testPlanService;
     private readonly IMessageService _messageService;
     private readonly ICurrentContext _currentContext;
     private readonly IEventAggregator _eventAggregator;
+
+    #endregion
+
+    #region 可观察属性
 
     /// <summary>当前软件物料号（由主界面导航时传入，用于面包屑显示）</summary>
     [ObservableProperty]
@@ -45,6 +51,14 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
     /// <summary>工位数量（来源数据库方案配置，不设上限）</summary>
     [ObservableProperty]
     private int _stationCount = 3;
+
+    /// <summary>
+    /// 单工位检测最大超时时间（秒，默认 120）
+    /// <para>约束该工位从下发开始测试指令到收到结果帧的总耗时，
+    /// 多工位共享串口导致轮询节奏变慢时由产线按需调大。</para>
+    /// </summary>
+    [ObservableProperty]
+    private int _maxTestTimeout = 120;
 
     /// <summary>
     /// 参数配置区参数列表（19 个激光检测参数项；集合变化时通知启用项数统计刷新）
@@ -93,6 +107,10 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
     [NotifyCanExecuteChangedFor(nameof(LastPageCommand))]
     private int _totalCount;
 
+    #endregion
+
+    #region 计算属性
+
     /// <summary>
     /// 总页数（由 TotalCount 与 PageSize 计算）
     /// </summary>
@@ -122,6 +140,10 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
     /// <summary>末页命令可用性（非末页时可用）</summary>
     private bool CanLastPage => PageIndex < TotalPages;
 
+    #endregion
+
+    #region 构造函数
+
     /// <summary>
     /// 构造函数
     /// </summary>
@@ -142,6 +164,10 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
 
         InitializeDefaultParameters();
     }
+
+    #endregion
+
+    #region 业务命令
 
     /// <summary>
     /// 查询命令：重置到第一页并按产品编码分页查询方案（结果为空时轻提示）
@@ -196,6 +222,12 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
             return;
         }
 
+        if (MaxTestTimeout < 1)
+        {
+            _messageService.GrowlInfo("最大超时时间至少为 1 秒！");
+            return;
+        }
+
 #if !DEBUG
         // Release 构建下：勾选启用的检测项必须配置 MES 代码（生产环境需与 MES 系统对接）；
         // Debug 构建下允许为空，便于开发调试。逐项收集后一次性提示，方便用户定位补齐。
@@ -215,11 +247,18 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
             // 判断是新增还是更新：按编码查询已存在方案
             bool isUpdate = await _testPlanService.GetBoardConfigAsync(ProductCode, ProductCategory.GasDG) != null;
 
+            // 单工位最大超时时间与 12V 电压等检测项一样作为参数项存入 ParametersJson
+            //（先过滤旧超时项再注入，避免重复；服务层与数据库均无感知）
+            var parameters = Parameters
+                .Where(p => p.Code != LaserDetectorItemCodes.MaxTestTimeout)
+                .ToList();
+            LaserDetectorTimeoutParameter.Upsert(parameters, MaxTestTimeout);
+
             var dto = new TestPlanDto
             {
                 ProductCode = ProductCode,
                 StationCount = StationCount,
-                Parameters = Parameters.ToList(),
+                Parameters = parameters,
                 Category = ProductCategory.GasDG,
                 UpdatedBy = _currentContext.UserName,
                 UpdatedTime = DateTime.Now
@@ -297,6 +336,10 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
         _eventAggregator.GetEvent<GoHomeEvent>().Publish();
     }
 
+    #endregion
+
+    #region 分页命令
+
     /// <summary>分页命令：跳转首页</summary>
     [RelayCommand(CanExecute = nameof(CanFirstPage))]
     private void FirstPage() => NavigateToPage(1);
@@ -312,6 +355,35 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
     /// <summary>分页命令：跳转末页</summary>
     [RelayCommand(CanExecute = nameof(CanLastPage))]
     private void LastPage() => NavigateToPage(TotalPages);
+
+    #endregion
+
+    #region 属性变化回调
+
+    /// <summary>
+    /// 选中方案变化时回填编辑区
+    /// </summary>
+    /// <param name="value">新选中的方案</param>
+    partial void OnSelectedPlanChanged(TestPlanDto? value)
+    {
+        if (value != null)
+        {
+            ApplyPlan(value);
+        }
+    }
+
+    /// <summary>
+    /// 页大小变化后重置到第一页（分页命令可用性由特性联动通知）
+    /// </summary>
+    /// <param name="value">新的页大小</param>
+    partial void OnPageSizeChanged(int value)
+    {
+        PageIndex = 1;
+    }
+
+    #endregion
+
+    #region 私有辅助方法
 
     /// <summary>
     /// 跳转到指定页并重新查询
@@ -400,27 +472,6 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
     }
 
     /// <summary>
-    /// 选中方案变化时回填编辑区
-    /// </summary>
-    /// <param name="value">新选中的方案</param>
-    partial void OnSelectedPlanChanged(TestPlanDto? value)
-    {
-        if (value != null)
-        {
-            ApplyPlan(value);
-        }
-    }
-
-    /// <summary>
-    /// 页大小变化后重置到第一页（分页命令可用性由特性联动通知）
-    /// </summary>
-    /// <param name="value">新的页大小</param>
-    partial void OnPageSizeChanged(int value)
-    {
-        PageIndex = 1;
-    }
-
-    /// <summary>
     /// 按产品编码分页查询方案列表
     /// </summary>
     /// <param name="notifyEmpty">
@@ -444,14 +495,24 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
 
     /// <summary>
     /// 将方案 DTO 回填到编辑区
+    /// <para>参数列表先过滤超时参数项（该值为全局项，不参与 19 个检测项的界面陈列，
+    /// 保持 XAML 按下标绑定不错位、启用项计数不虚增），超时秒数单独回填编辑框。</para>
     /// </summary>
     /// <param name="plan">测试方案</param>
     private void ApplyPlan(TestPlanDto plan)
     {
         ProductCode = plan.ProductCode;
         StationCount = plan.StationCount;
-        Parameters = new ObservableCollection<TestParameterDto>(plan.Parameters);
+        // 超时时间从参数项解析（旧方案无该项时回退默认 120 秒）
+        MaxTestTimeout = LaserDetectorTimeoutParameter.Resolve(plan.Parameters);
+        // 过滤超时参数项，保持编辑区仅 19 个检测项
+        Parameters = new ObservableCollection<TestParameterDto>(
+            plan.Parameters.Where(p => p.Code != LaserDetectorItemCodes.MaxTestTimeout));
     }
+
+    #endregion
+
+    #region 导航感知实现
 
     /// <inheritdoc/>
     public bool IsNavigationTarget(NavigationContext navigationContext) => true;
@@ -473,4 +534,6 @@ public partial class LaserDetectorConfigViewModel : ObservableObject, INavigatio
         PageIndex = 1;
         _ = OnQueryAsync();
     }
+
+    #endregion
 }

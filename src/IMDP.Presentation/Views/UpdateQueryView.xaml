@@ -116,7 +116,7 @@
                 <!-- 分页栏 -->
                 <StackPanel Grid.Row="1"
                             Orientation="Horizontal"
-                            HorizontalAlignment="Right"
+                            HorizontalAlignment="Left"
                             Margin="0,12,0,0">
                     <TextBlock VerticalAlignment="Center" Margin="0,0,12,0">
                         <Run Text="共 "/><Run Text="{Binding TotalCount}"/><Run Text=" 条   "/>

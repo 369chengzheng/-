@@ -9,6 +9,10 @@
 using IMDP.Domain.Entities;
 using IMDP.Domain.Interfaces;
 using SqlSugar;
+using IMDP.Domain.Products;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Data;
 
 namespace IMDP.Infrastructure.Persistence;
 
@@ -19,6 +23,12 @@ namespace IMDP.Infrastructure.Persistence;
 /// </summary>
 public class WholeConfigRepository : SplitTableRepository<WholeConfig>, IWholeConfigRepository
 {
+    /// <summary>
+    /// 过滤索引写入所需的会话选项，与事务使用同一条连接
+    /// </summary>
+    internal const string ScopedWriteOptions = "SET ANSI_NULLS ON; SET ANSI_PADDING ON; SET ANSI_WARNINGS ON; " +
+        "SET ARITHABORT ON; SET CONCAT_NULL_YIELDS_NULL ON; SET QUOTED_IDENTIFIER ON; SET NUMERIC_ROUNDABORT OFF;";
+
     /// <summary>
     /// 初始化 <see cref="WholeConfigRepository"/> 类的新实例。
     /// </summary>
@@ -126,7 +136,7 @@ public class WholeConfigRepository : SplitTableRepository<WholeConfig>, IWholeCo
     /// <returns>新增后的实体</returns>
     public override async Task<WholeConfig> AddAsync(WholeConfig entity)
     {
-        await _db.Insertable(entity).AS(GetTableName(entity.Category)).ExecuteCommandAsync();
+        await ExecuteWriteAsync(entity.Category, db => db.Insertable(entity).AS(GetTableName(entity.Category)).ExecuteCommandAsync());
         return entity;
     }
 
@@ -136,7 +146,10 @@ public class WholeConfigRepository : SplitTableRepository<WholeConfig>, IWholeCo
     /// <param name="entity">待更新的整机配置实体（需设置 Category 字段）</param>
     public override async Task UpdateAsync(WholeConfig entity)
     {
-        await _db.Updateable(entity).AS(GetTableName(entity.Category)).ExecuteCommandAsync();
+        await ExecuteWriteAsync(entity.Category, db => db.Updateable(entity)
+            .AS(GetTableName(entity.Category))
+            .Where(row => row.Id == entity.Id)
+            .ExecuteCommandAsync());
     }
 
     /// <summary>
@@ -162,7 +175,262 @@ public class WholeConfigRepository : SplitTableRepository<WholeConfig>, IWholeCo
         {
             // 软删除：仅标记删除状态，不物理删除
             entity.IsDeleted = true;
-            await _db.Updateable(entity).AS(GetTableName(category)).ExecuteCommandAsync();
+            await ExecuteWriteAsync(category, db => db.Updateable(entity)
+                .AS(GetTableName(category))
+                .Where(row => row.Id == entity.Id)
+                .ExecuteCommandAsync());
         }
     }
+
+
+    /// <summary>
+    /// 国内燃气共表写入时在同一连接应用过滤索引选项，其他分类沿用公共客户端
+    /// </summary>
+    private async Task ExecuteWriteAsync(string category, Func<ISqlSugarClient, Task<int>> write)
+    {
+        if (category != ProductCategory.GasDG) { await write(_db); return; }
+        using var db = _db.CopyNew();
+        await db.Ado.BeginTranAsync();
+        try
+        {
+            await db.Ado.ExecuteCommandAsync(ScopedWriteOptions);
+            await write(db);
+            await db.Ado.CommitTranAsync();
+        }
+        catch { await db.Ado.RollbackTranAsync(); throw; }
+    }
+
+    /// <inheritdoc/>
+    public async Task<WholeConfig?> GetScopedAsync(int planType, string productCode, string customerCode, string category,
+        string productKey, string materialNumber)
+    {
+        CheckScopedCategory(category, productKey);
+        using var db = _db.CopyNew();
+        await CheckBindingAsync(db, materialNumber, productKey, false);
+        var rows = await ScopedQuery(db, planType, productCode, customerCode, category, productKey, materialNumber).Take(2).ToListAsync();
+        if (rows.Count > 1) throw new InvalidOperationException("该范围存在重复有效方案，请先核对数据。");
+        return rows.SingleOrDefault();
+    }
+
+    /// <inheritdoc/>
+    public async Task<PagedResult<WholeConfig>> GetScopedPagedAsync(int planType, string productCodeKeyword, string customerCodeKeyword,
+        int pageIndex, int pageSize, string category, string productKey, string materialNumber)
+    {
+        CheckScopedCategory(category, productKey);
+        using var db = _db.CopyNew();
+        await CheckBindingAsync(db, materialNumber, productKey, false);
+        RefAsync<int> totalCount = 0;
+        var items = await ScopedListQuery(db, planType, productCodeKeyword, customerCodeKeyword, category, productKey, materialNumber)
+            .ToPageListAsync(pageIndex, pageSize, totalCount);
+        return new PagedResult<WholeConfig>
+        {
+            Items = items,
+            TotalCount = totalCount.Value,
+            PageIndex = pageIndex,
+            PageSize = pageSize
+        };
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> DeleteScopedAsync(long id, int planType, string productCode, string customerCode,
+        string category, string productKey, string materialNumber, string operatorWorkNumber)
+    {
+        CheckScopedCategory(category, productKey);
+        if (string.IsNullOrWhiteSpace(operatorWorkNumber)) throw new ArgumentException("操作员工号无效。");
+        using var db = _db.CopyNew();
+        await db.Ado.BeginTranAsync(IsolationLevel.Serializable);
+        try
+        {
+            await db.Ado.ExecuteCommandAsync(ScopedWriteOptions);
+            await CheckBindingAsync(db, materialNumber, productKey, true);
+            var config = await ScopedQuery(db, planType, productCode, customerCode, category, productKey, materialNumber)
+                .Where(row => row.Id == id).FirstAsync();
+            if (config == null)
+            {
+                await db.Ado.CommitTranAsync();
+                return false;
+            }
+            var before = AuditSnapshot(config);
+            var now = DateTime.Now;
+            config.IsDeleted = true;
+            config.UpdatedBy = operatorWorkNumber;
+            config.UpdatedTime = now;
+            if (await ScopedDeleteUpdate(db, config, category).ExecuteCommandAsync() != 1)
+                throw new InvalidOperationException("原方案已变化，请重新查询后删除。");
+            await db.Insertable(new WholeConfigAuditLog
+            {
+                RecordId = config.Id,
+                OperationType = "DELETE",
+                DeletedData = before,
+                InsertedData = null,
+                CreatedBy = operatorWorkNumber,
+                CreatedTime = now,
+                ComputerName = config.ComputerName,
+                UserName = config.UserName,
+                AppName = config.AppName
+            }).AS(category + "WholeConfigAuditLog").ExecuteCommandAsync();
+            await db.Ado.CommitTranAsync();
+            return true;
+        }
+        catch
+        {
+            await db.Ado.RollbackTranAsync();
+            throw;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<WholeConfig> SaveScopedAsync(int planType, string productCode, string customerCode, string category,
+        string productKey, string materialNumber, int stationCount, string parametersJson,
+        string operatorWorkNumber)
+    {
+        CheckScopedCategory(category, productKey);
+        if (stationCount < 1 || string.IsNullOrWhiteSpace(operatorWorkNumber))
+            throw new ArgumentException("工位数量或操作员工号无效。");
+        using var db = _db.CopyNew();
+        await db.Ado.BeginTranAsync(IsolationLevel.Serializable);
+        try
+        {
+            await db.Ado.ExecuteCommandAsync(ScopedWriteOptions);
+            // 同一物料的有效绑定在保存期间保持稳定，并串行化该物料的新增判定。
+            await CheckBindingAsync(db, materialNumber, productKey, true);
+            var rows = await ScopedQuery(db, planType, productCode, customerCode, category, productKey, materialNumber).Take(2).ToListAsync();
+            if (rows.Count > 1) throw new InvalidOperationException("该范围存在重复有效方案，请先核对数据。");
+            var existing = rows.SingleOrDefault();
+            if (existing != null && SameContent(existing, stationCount, parametersJson))
+            {
+                await db.Ado.CommitTranAsync();
+                return existing;
+            }
+
+            var before = existing == null ? null : AuditSnapshot(existing);
+            var now = DateTime.Now;
+            var config = existing ?? new WholeConfig
+            {
+                ProductKey = productKey,
+                MaterialNumber = materialNumber,
+                PlanType = planType,
+                ProductCode = productCode,
+                CustomerCode = customerCode,
+                CreatedBy = operatorWorkNumber,
+                CreatedTime = now
+            };
+            config.ParametersJson = parametersJson;
+            config.StationCount = stationCount;
+            config.UpdatedBy = operatorWorkNumber;
+            config.UpdatedTime = now;
+            if (existing == null)
+                config.Id = await db.Insertable(config).AS(GetTableName(category)).ExecuteReturnBigIdentityAsync();
+            else
+            {
+                var affected = await db.Updateable(config).AS(GetTableName(category))
+                    .Where(row => row.Id == config.Id && row.ProductKey == productKey &&
+                        row.MaterialNumber == materialNumber && row.PlanType == planType &&
+                        row.ProductCode == productCode && row.CustomerCode == customerCode && !row.IsDeleted)
+                    .ExecuteCommandAsync();
+                if (affected != 1) throw new InvalidOperationException("原方案已变化，请重新查询后维护。");
+            }
+
+            // 重新读取实际保存的字段，用于页面回显及审计快照。
+            var saved = await ScopedQuery(db, planType, productCode, customerCode, category, productKey, materialNumber).SingleAsync();
+            await db.Insertable(new WholeConfigAuditLog
+            {
+                RecordId = saved.Id,
+                OperationType = existing == null ? "INSERT" : "UPDATE",
+                DeletedData = before,
+                InsertedData = AuditSnapshot(saved),
+                CreatedBy = operatorWorkNumber,
+                CreatedTime = now,
+                ComputerName = saved.ComputerName,
+                UserName = saved.UserName,
+                AppName = saved.AppName
+            }).AS(category + "WholeConfigAuditLog").ExecuteCommandAsync();
+            await db.Ado.CommitTranAsync();
+            return saved;
+        }
+        catch
+        {
+            await db.Ado.RollbackTranAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 支持四类整机方案存储，插件标识须与所属产品类别一致
+    /// </summary>
+    private static void CheckScopedCategory(string category, string productKey)
+    {
+        if (category is not (ProductCategory.GasDG or ProductCategory.GasOG or ProductCategory.WaterDW or ProductCategory.WaterOW)
+            || string.IsNullOrWhiteSpace(productKey)
+            || !productKey.StartsWith(category + ".", StringComparison.Ordinal))
+            throw new ArgumentException("产品类别或插件标识不匹配。");
+    }
+
+    /// <summary>
+    /// 软删除仍核对主键和完整范围，只更新未删除记录
+    /// </summary>
+    private IUpdateable<WholeConfig> ScopedDeleteUpdate(ISqlSugarClient db, WholeConfig config, string category) =>
+        db.Updateable(config).AS(GetTableName(category)).Where(row => row.Id == config.Id && row.ProductKey == config.ProductKey &&
+            row.MaterialNumber == config.MaterialNumber && row.PlanType == config.PlanType &&
+            row.ProductCode == config.ProductCode && row.CustomerCode == config.CustomerCode && !row.IsDeleted);
+
+    /// <summary>
+    /// 列表查询固定插件、物料及类型，空编码不筛选，非空编码沿管理页约定模糊匹配
+    /// </summary>
+    private ISugarQueryable<WholeConfig> ScopedListQuery(ISqlSugarClient db, int planType, string productCodeKeyword, string customerCodeKeyword,
+        string category, string productKey, string materialNumber) =>
+        db.Queryable<WholeConfig>().AS(GetTableName(category)).Where(row =>
+            row.ProductKey == productKey && row.MaterialNumber == materialNumber && row.PlanType == planType && !row.IsDeleted)
+            .WhereIF(!string.IsNullOrWhiteSpace(productCodeKeyword), row => row.ProductCode.Contains(productCodeKeyword))
+            .WhereIF(!string.IsNullOrWhiteSpace(customerCodeKeyword), row => row.CustomerCode.Contains(customerCodeKeyword))
+            .OrderByDescending(row => row.UpdatedTime).OrderByDescending(row => row.Id);
+
+    /// <summary>
+    /// 完整范围必须同时出现在查询条件中，不能仅凭产品和客户编码取第一条
+    /// </summary>
+    private ISugarQueryable<WholeConfig> ScopedQuery(ISqlSugarClient db, int planType, string productCode, string customerCode, string category,
+        string productKey, string materialNumber) =>
+        db.Queryable<WholeConfig>().AS(GetTableName(category)).Where(row =>
+            row.ProductKey == productKey && row.MaterialNumber == materialNumber && row.PlanType == planType &&
+            row.ProductCode == productCode && row.CustomerCode == customerCode && !row.IsDeleted);
+
+    /// <summary>
+    /// 核对物料仍绑定当前插件，保存时锁定该物料的有效绑定
+    /// </summary>
+    private static async Task CheckBindingAsync(ISqlSugarClient db, string materialNumber, string productKey, bool locked)
+    {
+        var query = db.Queryable<MaterialProductMap>().Where(row => row.MaterialNumber == materialNumber && !row.IsDeleted);
+        if (locked) query = query.With(SqlWith.UpdLock);
+        var maps = await query.Take(2).ToListAsync();
+        if (maps.Count != 1) throw new InvalidOperationException("物料有效绑定不存在或不唯一，请返回首页重新确认。");
+        List<string>? keys;
+        try { keys = JsonConvert.DeserializeObject<List<string>>(maps[0].ProductPluginsJson); }
+        catch (JsonException) { throw new InvalidOperationException("物料插件绑定内容无效，请先维护绑定。"); }
+        if (keys == null || !keys.Contains(productKey, StringComparer.Ordinal))
+            throw new InvalidOperationException("当前物料未绑定该插件，请返回首页重新确认。");
+    }
+
+    /// <summary>
+    /// 比较实际业务内容，忽略 JSON 空白和对象属性顺序，数组项目顺序仍保留
+    /// </summary>
+    internal static bool SameContent(WholeConfig config, int stationCount, string parametersJson) =>
+        config.StationCount == stationCount && JToken.DeepEquals(JToken.Parse(config.ParametersJson), JToken.Parse(parametersJson));
+
+    /// <summary>
+    /// 审计沿用原整机快照格式，密码参数的值和默认值均遮罩
+    /// </summary>
+    internal static string AuditSnapshot(WholeConfig config)
+    {
+        var parameters = JArray.Parse(config.ParametersJson);
+        foreach (var node in parameters.Descendants().OfType<JObject>())
+            if (((string?)node["Code"])?.Contains("Password", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                node["Value"] = "***";
+                if (node["DefaultValue"] != null) node["DefaultValue"] = "***";
+            }
+        var snapshot = JObject.FromObject(config);
+        snapshot[nameof(WholeConfig.ParametersJson)] = parameters.ToString(Formatting.None);
+        return snapshot.ToString(Formatting.None);
+    }
+
 }

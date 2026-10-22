@@ -6,7 +6,9 @@ using Prism.Modularity;
 
 namespace IMDP.Products.GasDG.AlarmHost;
 
-/// <summary>仅注册插件及专属页面，不初始化数据库、串口或 MES 服务。</summary>
+/// <summary>
+/// 仅注册插件及专属页面，不初始化数据库、串口或 MES 服务
+/// </summary>
 public sealed class GasDGAlarmHostModule : IModule
 {
     public void RegisterTypes(IContainerRegistry containerRegistry)

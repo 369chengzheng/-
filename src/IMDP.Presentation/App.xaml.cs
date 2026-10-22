@@ -196,9 +196,9 @@ public partial class App : PrismApplication
         try
         {
             // 创建数据库表结构并写入种子数据
-            // CodeFirst 已开启 IsAutoUpdateTable：
-            //   - 新建不存在的表（如 LoginConfig）
-            //   - 补齐已存在表中缺失的列（如旧 Logins 表缺 IpAddress/LoginType/LoginResult/ErrorInfo）
+            // CodeFirst 未开启 IsAutoUpdateTable（避免误改已有列类型）：
+            //   - 新建不存在的表
+            //   - 已存在的表跳过不修改（实体新增属性须随 JSON 存储或走幂等补列 T-SQL）
             var dbContext = Container.Resolve<IDbContext>();
             await dbContext.EnsureCreatedAsync();
             await dbContext.SeedDataAsync();
@@ -230,7 +230,7 @@ public partial class App : PrismApplication
         }
 
         // 公共协议工具类自测（仅 DEBUG 编译；延迟 5 秒后台执行，结果写 NLog，不弹窗不阻塞）
-        //_ = CommonServiceSelfTest.RunAfterStartupAsync();
+        _ = CommonServiceSelfTest.RunAfterStartupAsync();
     }
 
     /// <summary>
