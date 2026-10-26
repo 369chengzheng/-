@@ -308,7 +308,10 @@ public class TestPlanService : ITestPlanService
             plan.MaterialNumber != materialNumber || plan.PlanType != planType ||
             plan.ProductCode != productCode || plan.CustomerCode != customerCode)
             throw new ArgumentException("方案与当前物料、类型或产品及客户编码不匹配。");
-        if (plan.StationCount < 1 || plan.Parameters == null || !plan.Parameters.Any(item => item.IsEnabled))
+        if (plan.StationCount < 1 || plan.Parameters == null ||
+            plan.Parameters.Any(item => item == null || item.Parameters == null ||
+                item.Parameters.Any(parameter => parameter == null || parameter.Value == null)) ||
+            !plan.Parameters.Any(item => item.IsEnabled))
             throw new ArgumentException("请提供有效工位数量及至少一个已启用项目。");
         var result = await _wholeConfigRepo.SaveScopedAsync(planType, productCode, customerCode, category, productKey, materialNumber, plan.StationCount,
             JsonConvert.SerializeObject(plan.Parameters), workNumber);
@@ -572,11 +575,11 @@ public class TestPlanService : ITestPlanService
             ProductKey = config.ProductKey,
             Category = category,
             StationCount = config.StationCount,
-            Parameters = JsonConvert.DeserializeObject<List<TestParameterDto>>(config.ParametersJson) ?? new List<TestParameterDto>(),
             CreatedBy = config.CreatedBy,
             CreatedTime = config.CreatedTime,
             UpdatedBy = config.UpdatedBy,
-            UpdatedTime = config.UpdatedTime
+            UpdatedTime = config.UpdatedTime,
+            Parameters = JsonConvert.DeserializeObject<List<TestParameterDto>>(config.ParametersJson) ?? []
         };
     }
 }

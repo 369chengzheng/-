@@ -2,64 +2,304 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:prism="http://prismlibrary.com/"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              prism:ViewModelLocator.AutoWireViewModel="True"
+             Loaded="ViewLoaded" Unloaded="ViewUnloaded"
              Background="{StaticResource ImdpPageBackgroundBrush}">
     <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <!-- 展开时与结果区分享剩余高度；收起后不保留方案区的星号空间。 -->
+            <RowDefinition MaxHeight="360">
+                <RowDefinition.Style>
+                    <Style TargetType="RowDefinition">
+                        <Setter Property="Height" Value="*"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPlanVisible}" Value="False">
+                                <Setter Property="Height" Value="Auto"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </RowDefinition.Style>
+            </RowDefinition>
+            <!-- 固定表头及底部统计之外，窄窗仍保留至少一行完整结果视口。 -->
+            <RowDefinition Height="*" MinHeight="312"/>
         </Grid.RowDefinitions>
 
-        <Border Margin="0,0,0,10" Padding="28,14"
-                Style="{StaticResource ManagementSurfaceStyle}">
-            <DockPanel>
+        <Border Margin="0,0,0,10" Padding="20,8" Height="46" Style="{StaticResource ManagementSurfaceStyle}">
+            <Grid VerticalAlignment="Center">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                 <Button Content="首页" Command="{Binding GoHomeCommand}"
-                        VerticalAlignment="Center"
                         Style="{StaticResource BreadcrumbButtonStyle}"/>
-                <TextBlock Text="&gt;" Margin="5,0" VerticalAlignment="Center"
-                           Foreground="{StaticResource ImdpMutedTextBrush}"/>
-                <TextBlock Text="{Binding BreadcrumbTitle}" TextWrapping="Wrap"
-                           FontSize="14" VerticalAlignment="Center"
-                           Foreground="{StaticResource ImdpTextBrush}"/>
-            </DockPanel>
+                <TextBlock Grid.Column="1" Text=" > " VerticalAlignment="Center" Style="{StaticResource BreadcrumbSeparatorStyle}"/>
+                <TextBlock Grid.Column="2" Text="{Binding BreadcrumbTitle}" ToolTip="{Binding BreadcrumbTitle}"
+                           TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Style="{StaticResource BreadcrumbCurrentStyle}"/>
+            </Grid>
         </Border>
 
-        <Border Grid.Row="1" Padding="28,24"
-                Style="{StaticResource ManagementSurfaceStyle}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-                <StackPanel>
-                    <TextBlock Text="{Binding PageTitle}" FontSize="22"
-                               FontWeight="SemiBold" TextWrapping="Wrap"
-                               Foreground="{StaticResource ImdpTextBrush}"/>
-                    <TextBlock Text="{Binding Description}" Margin="0,12,0,24"
-                               FontSize="14" TextWrapping="Wrap"
-                               Foreground="{StaticResource ImdpMutedTextBrush}"/>
+        <!-- 查询仅按完整产品/客户编码取一份方案，参数区随可用宽度换行。 -->
+        <Border Grid.Row="1" Padding="20,12" Margin="0,0,0,10" Style="{StaticResource ManagementSurfaceStyle}">
+            <StackPanel>
+                <Grid x:Name="QueryLayout" SizeChanged="QueryLayoutSizeChanged">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                    <StackPanel x:Name="QueryActions" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
+                        <Button Content="刷新串口" Command="{Binding RefreshPortsCommand}" Width="90" Height="40" Margin="0,0,10,0"
+                                Style="{StaticResource SemanticButtonBaseStyle}" Background="#EDF3FF" Foreground="{StaticResource ImdpPrimaryActionBrush}"/>
+                        <Button x:Name="QueryButton" Command="{Binding QueryCommand}" Width="100" Height="40" Margin="0,0,10,0" Style="{StaticResource SemanticQueryButtonStyle}">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Magnify" Width="18" Height="18" Margin="0,0,6,0"/>
+                                <TextBlock Text="查询" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="TogglePlanButton" Content="{Binding TogglePlanText}" Command="{Binding TogglePlanCommand}"
+                                Width="100" Height="40" Margin="0,0,10,0" Style="{StaticResource SemanticButtonBaseStyle}"
+                                Background="#EDF3FF" Foreground="{StaticResource ImdpPrimaryActionBrush}"/>
+                        <Button x:Name="TogglePortsButton" Content="{Binding TogglePortsText}" Command="{Binding TogglePortsCommand}"
+                                Width="100" Height="40" Margin="0,0,10,0" Click="PortsButtonClick" Style="{StaticResource SemanticQueryButtonStyle}"/>
+                        <Button Content="结束工单" Command="{Binding EndWorkOrderCommand}" Width="110" Height="40"
+                                Style="{StaticResource SemanticButtonBaseStyle}" Background="#FFF1F0" Foreground="#D13A35"/>
+                    </StackPanel>
+                    <WrapPanel x:Name="QueryFields" VerticalAlignment="Center" IsEnabled="{Binding CanQuery}">
+                        <Grid Width="260" Margin="0,0,20,4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="产品编码:" VerticalAlignment="Center"/>
+                            <TextBox x:Name="ProductCodeInput" Grid.Column="1" Style="{StaticResource PlanParameterInputStyle}" MaxLength="100"
+                                     ToolTip="填写完整产品编码" Text="{Binding ProductCode, UpdateSourceTrigger=PropertyChanged}"/>
+                        </Grid>
+                        <Grid Width="260" Margin="0,0,20,4">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="客户编码:" VerticalAlignment="Center"/>
+                            <TextBox x:Name="CustomerCodeInput" Grid.Column="1" Style="{StaticResource PlanParameterInputStyle}" MaxLength="100"
+                                     ToolTip="填写完整客户编码" Text="{Binding CustomerCode, UpdateSourceTrigger=PropertyChanged}"/>
+                        </Grid>
+                    </WrapPanel>
+                </Grid>
+                <TextBlock x:Name="QueryMessageText" Text="{Binding QueryMessage}" Margin="0,8,0,0" FontSize="12"
+                           Foreground="{StaticResource ImdpMutedTextBrush}" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding WorkOrderText}" Margin="0,4,0,0" FontSize="12"
+                           Foreground="{StaticResource ImdpMutedTextBrush}" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
 
-                    <TextBlock Text="软件物料号" FontSize="13"
-                               Foreground="{StaticResource ImdpMutedTextBrush}"/>
-                    <TextBlock Text="{Binding MaterialNumberDisplay}" Margin="0,6,0,16"
-                               FontSize="16" TextWrapping="Wrap"
-                               Foreground="{StaticResource ImdpTextBrush}"/>
-                    <TextBlock Text="插件标识" FontSize="13"
-                               Foreground="{StaticResource ImdpMutedTextBrush}"/>
-                    <TextBlock Text="{Binding ProductKey}" Margin="0,6,0,24"
-                               FontSize="14" TextWrapping="Wrap"
-                               Foreground="{StaticResource ImdpTextBrush}"/>
-
-                    <Border Padding="18" Background="#FFF7E6"
-                            BorderBrush="#F0D59B" BorderThickness="1" CornerRadius="4">
-                        <StackPanel>
-                            <TextBlock Text="{Binding StatusText}" FontSize="17"
-                                       FontWeight="SemiBold" Foreground="#946200"
-                                       TextWrapping="Wrap"/>
-                            <TextBlock Text="{Binding StageNotice}" Margin="0,8,0,0"
-                                       FontSize="14" Foreground="#72572A"
-                                       TextWrapping="Wrap"/>
+        <!-- 仅显示已启用项目，沿用配置页的有参数、无参数两区及只读控件样式。 -->
+        <Border x:Name="PlanSection" Grid.Row="2" Padding="20,12" VerticalAlignment="Top" MaxHeight="360"
+                Style="{StaticResource ManagementSurfaceStyle}"
+                Visibility="{Binding IsPlanVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <WrapPanel Margin="0,0,0,10">
+                    <TextBlock Text="{Binding PlanSummary}" FontWeight="SemiBold" Margin="0,0,24,4"/>
+                    <TextBlock Text="{Binding PlanMaintenance}" Foreground="{StaticResource ImdpMutedTextBrush}" FontSize="12" Margin="0,0,0,4"/>
+                </WrapPanel>
+                <ScrollViewer x:Name="PlanScroll" Grid.Row="1" MaxHeight="360" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <ItemsControl x:Name="ParameterPlanItems" ItemsSource="{Binding ParameterItems}" ItemTemplate="{StaticResource PlanPreviewItemTemplate}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                        <StackPanel Visibility="{Binding HasItems, ElementName=NoParameterPlanItems, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <!-- 两区都有项目时显示分界；仅有无参数项目时直接从首行展示。 -->
+                            <Border x:Name="NoParameterPlanHeader" BorderBrush="{StaticResource ImdpBorderBrush}" BorderThickness="0,1,0,0" Margin="0,8,0,8"
+                                    Visibility="{Binding HasItems, ElementName=ParameterPlanItems, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                            <ItemsControl x:Name="NoParameterPlanItems" ItemsSource="{Binding NoParameterItems}" ItemTemplate="{StaticResource PlanPreviewItemTemplate}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            </ItemsControl>
                         </StackPanel>
+                        <!-- 工位数属于整份方案，不作为检测项目展示；数量来自实际方案输入。 -->
+                        <Border BorderBrush="{StaticResource ImdpBorderBrush}" BorderThickness="0,1,0,0" Margin="0,8,12,0" Padding="0,12,0,4">
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="{StaticResource PlanNameColumnWidth}"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="工位数量：" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1" Text="{Binding StationCount}" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+        <!-- 已勾选项目生成结果行；工位等分宽度，仅结果区纵向滚动。 -->
+        <Border x:Name="StationSection" Grid.Row="3" Padding="20,12" Margin="0,10,0,0"
+                Style="{StaticResource ManagementSurfaceStyle}"
+                Visibility="{Binding HasPlan, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid>
+                <Grid.RowDefinitions><RowDefinition Height="204"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <!-- 表头使用结果视口宽度，自动让出纵向滚动条占位，保持每列上下对齐。 -->
+                <Grid x:Name="StationHeader" Width="{Binding ViewportWidth, ElementName=ResultScroll}" HorizontalAlignment="Left">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="36"/><RowDefinition Height="28"/><RowDefinition Height="28"/>
+                        <RowDefinition Height="48"/><RowDefinition Height="32"/><RowDefinition Height="32"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Border Background="#E8EDF2" Margin="0,0,2,0">
+                        <TextBlock Text="序号" TextAlignment="Center" VerticalAlignment="Center" FontSize="12"/>
                     </Border>
-                </StackPanel>
-            </ScrollViewer>
+                    <Border Grid.Column="1" Background="#E8EDF2" Margin="2,0,2,0">
+                        <TextBlock Text="检测项目" TextAlignment="Center" VerticalAlignment="Center" FontSize="12"/>
+                    </Border>
+                    <Border Grid.Row="1" Background="#F4F9FD" Margin="0,0,2,0"/>
+                    <Border Grid.Row="1" Grid.Column="1" Background="#F4F9FD" Margin="2,0,2,0" Padding="6,0">
+                        <TextBlock Text="串口" VerticalAlignment="Center" FontSize="12"/>
+                    </Border>
+                    <Border Grid.Row="2" Background="#F4F9FD" Margin="0,0,2,0"/>
+                    <Border Grid.Row="2" Grid.Column="1" Background="#F4F9FD" Margin="2,0,2,0" Padding="6,0">
+                        <TextBlock Text="波特率" VerticalAlignment="Center" FontSize="12"/>
+                    </Border>
+                    <Border Grid.Row="3" Background="#F4F9FD" Margin="0,0,2,0"/>
+                    <Border Grid.Row="3" Grid.Column="1" Background="#F4F9FD" Margin="2,0,2,0" Padding="6,0">
+                        <TextBlock Text="工位状态" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold"/>
+                    </Border>
+                    <Border Grid.Row="4" Background="#F4F9FD" Margin="0,0,2,0"/>
+                    <Border Grid.Row="4" Grid.Column="1" Background="#F4F9FD" Margin="2,0,2,0" Padding="6,0">
+                        <TextBlock Text="扫码编号" VerticalAlignment="Center" FontSize="12"/>
+                    </Border>
+                    <ItemsControl x:Name="StationColumns" Grid.Column="2" Grid.RowSpan="6" ItemsSource="{Binding Stations}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Margin="2,0,2,0">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="36"/><RowDefinition Height="28"/><RowDefinition Height="28"/>
+                                            <RowDefinition Height="48"/><RowDefinition Height="32"/><RowDefinition Height="32"/>
+                                        </Grid.RowDefinitions>
+                                        <Border Background="#E8EDF2" Padding="1,2">
+                                            <TextBlock Text="{Binding Number, StringFormat=工位{0}}" ToolTip="{Binding Number, StringFormat=工位{0}}"
+                                                       FontSize="12" FontWeight="SemiBold" TextAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                        </Border>
+                                        <ComboBox x:Name="PortInput" Grid.Row="1" FontSize="12" Padding="2,0" Margin="0,1"
+                                                  ItemsSource="{Binding DataContext.AvailablePorts, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                  SelectedItem="{Binding PortName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding PortName}"
+                                                  IsEnabled="{Binding CanEditPort}" DropDownOpened="PortDropDownOpened"/>
+                                        <ComboBox x:Name="BaudRateInput" Grid.Row="2" FontSize="12" Padding="2,0" Margin="0,1"
+                                                  ItemsSource="{Binding DataContext.BaudRates, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                  SelectedItem="{Binding BaudRate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding BaudRate}"
+                                                  IsEnabled="{Binding CanEditPort}"/>
+                                        <!-- 总状态独立突出；运行及MES处理期间不沿用上次通过的绿色。 -->
+                                        <Border Grid.Row="3" Margin="0,2" Padding="2" CornerRadius="4">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#EAF1F8"/>
+                                                    <Style.Triggers>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding IsRunning}" Value="False"/>
+                                                                <Condition Binding="{Binding IsPass}" Value="True"/>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter Property="Background" Value="#198B43"/>
+                                                        </MultiDataTrigger>
+                                                        <MultiDataTrigger>
+                                                            <MultiDataTrigger.Conditions>
+                                                                <Condition Binding="{Binding IsRunning}" Value="False"/>
+                                                                <Condition Binding="{Binding IsPass}" Value="False"/>
+                                                            </MultiDataTrigger.Conditions>
+                                                            <Setter Property="Background" Value="#D13A35"/>
+                                                        </MultiDataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBlock Text="{Binding DisplayStatus}" ToolTip="{Binding DisplayStatus}" TextAlignment="Center" VerticalAlignment="Center"
+                                                       FontSize="18" FontWeight="Bold" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="40" LineHeight="20" LineStackingStrategy="BlockLineHeight">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{StaticResource ImdpMutedTextBrush}"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsScanned}" Value="True">
+                                                                <Setter Property="Foreground" Value="{StaticResource ImdpPrimaryActionBrush}"/>
+                                                            </DataTrigger>
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding IsRunning}" Value="False"/>
+                                                                    <Condition Binding="{Binding IsPass}" Value="True"/>
+                                                                </MultiDataTrigger.Conditions>
+                                                                <Setter Property="Foreground" Value="White"/>
+                                                            </MultiDataTrigger>
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding IsRunning}" Value="False"/>
+                                                                    <Condition Binding="{Binding IsPass}" Value="False"/>
+                                                                </MultiDataTrigger.Conditions>
+                                                                <Setter Property="Foreground" Value="White"/>
+                                                            </MultiDataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </Border>
+                                        <Border Grid.Row="4" Padding="2,0" BorderThickness="1">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Setter Property="Background" Value="#F4F9FD"/>
+                                                    <Setter Property="BorderBrush" Value="Transparent"/>
+                                                    <Style.Triggers>
+                                                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                                            <Setter Property="BorderBrush" Value="{StaticResource ImdpPrimaryActionBrush}"/>
+                                                        </Trigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <TextBox x:Name="ScanCodeInput" Style="{StaticResource PlanParameterInputStyle}" MinHeight="26" Padding="1,0" FontSize="12"
+                                                     Text="{Binding ScanCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ToolTip="{Binding ScanCode}"
+                                                     IsEnabled="{Binding CanScan}"
+                                                     AutomationProperties.Name="{Binding Number, StringFormat=工位{0}扫码编号}"
+                                                     Loaded="ScanInputLoaded" KeyDown="ScanCodeKeyDown"/>
+                                        </Border>
+                                        <Button x:Name="ExecuteButton" Grid.Row="5" FontSize="12" Padding="1,0" Margin="0,2,0,0" ToolTip="按当前方案执行本工位" ClipToBounds="True"
+                                                Style="{StaticResource SemanticQueryButtonStyle}"
+                                                Command="{Binding DataContext.ExecuteStationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <TextBlock Text="执行" TextTrimming="CharacterEllipsis"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
+                <ScrollViewer x:Name="ResultScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
+                    <ItemsControl x:Name="ResultRows" ItemsSource="{Binding ResultRows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Height="32">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <Border Background="#F4F9FD" Margin="0,0,2,0">
+                                        <TextBlock Text="{Binding Index}" TextAlignment="Center" VerticalAlignment="Center" FontSize="12"/>
+                                    </Border>
+                                    <Border Grid.Column="1" Background="#F4F9FD" Margin="2,0,2,0" Padding="6,0">
+                                        <TextBlock Text="{Binding Name}" ToolTip="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center" FontSize="12"/>
+                                    </Border>
+                                    <ItemsControl x:Name="StationResults" Grid.Column="2" ItemsSource="{Binding Cells}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#F4F9FD" Margin="2,0,2,0" Padding="2,3">
+                                                    <Border>
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="White"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsPass}" Value="True"><Setter Property="Background" Value="#DDF3E3"/></DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsPass}" Value="False"><Setter Property="Background" Value="#FCE3E1"/></DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <TextBlock Text="{Binding Value}" ToolTip="{Binding Message}" TextAlignment="Center" VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" FontSize="12"/>
+                                                    </Border>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <TextBlock x:Name="StatisticsSummary" Grid.Row="2" Text="{Binding StatisticsText}" Margin="0,8,0,0"
+                           Foreground="{StaticResource ImdpMutedTextBrush}"/>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

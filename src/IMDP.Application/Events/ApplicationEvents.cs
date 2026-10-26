@@ -89,6 +89,11 @@ public sealed class HomeMenuResolvedPayload
     public string MaterialNumber { get; init; } = string.Empty;
 
     /// <summary>
+    /// 制令单查询返回的MES产品名称，手动物料查询时为空
+    /// </summary>
+    public string ProductName { get; init; } = string.Empty;
+
+    /// <summary>
     /// 尚未经过角色和工位过滤的原始菜单
     /// </summary>
     public IReadOnlyList<FunctionModuleType> RawModules { get; init; } = Array.Empty<FunctionModuleType>();
@@ -136,6 +141,26 @@ public class NavigateToModulePayload
 
     /// <summary>当前软件物料号（由主界面查询时获取，传递给目标视图用于面包屑显示）</summary>
     public string? MaterialNumber { get; set; }
+
+    /// <summary>
+    /// 当前已生效查询的MES产品名称，供插件面包屑展示
+    /// </summary>
+    public string ProductName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 已生效的制令单号，手动物料查询时为空
+    /// </summary>
+    public string OrderNumber { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 当前登录工位的MES资源编码，与页面内工位序号分开
+    /// </summary>
+    public string ResourceCode { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 发起本次导航的操作员工号，供执行期间保存不可变快照
+    /// </summary>
+    public string OperatorWorkNumber { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -144,6 +169,14 @@ public class NavigateToModulePayload
 /// <para>订阅者：主界面 ViewModel 执行区域导航回 Home。</para>
 /// </summary>
 public class GoHomeEvent : PubSubEvent
+{
+}
+
+/// <summary>
+/// 已确认结束当前工单，宿主清除生效物料和菜单后返回首页
+/// 不退出登录，不调用MES或删除历史记录
+/// </summary>
+public class EndWorkOrderEvent : PubSubEvent
 {
 }
 

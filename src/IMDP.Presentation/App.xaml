@@ -7,6 +7,7 @@
 <prism:PrismApplication x:Class="IMDP.Presentation.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
              xmlns:prism="http://prismlibrary.com/"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes">
     <Application.Resources>
@@ -292,6 +293,152 @@
                 <Setter Property="FontFamily" Value="Consolas"/>
                 <Setter Property="FontSize" Value="13"/>
             </Style>
+
+            <!-- 方案编辑与只读预览共用布局；组宽含末尾12间距，无参数项仅保留名称与MES列。 -->
+            <GridLength x:Key="PlanNameColumnWidth">126</GridLength>
+            <GridLength x:Key="PlanMesColumnWidth">80</GridLength>
+            <sys:Double x:Key="PlanGroupWidth">412</sys:Double>
+            <sys:Double x:Key="PlanComplexGroupWidth">824</sys:Double>
+            <sys:Double x:Key="PlanCompactGroupWidth">220</sys:Double>
+            <Thickness x:Key="PlanFieldSpacing">0,0,12,0</Thickness>
+            <Style x:Key="PlanGroupStyle" TargetType="Grid">
+                <Setter Property="Width" Value="{StaticResource PlanGroupWidth}"/>
+                <Setter Property="MaxWidth" Value="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"/>
+                <Setter Property="HorizontalAlignment" Value="Left"/>
+                <Setter Property="VerticalAlignment" Value="Top"/>
+            </Style>
+            <Style x:Key="PlanComplexGroupStyle" TargetType="Grid" BasedOn="{StaticResource PlanGroupStyle}">
+                <Setter Property="Width" Value="{StaticResource PlanComplexGroupWidth}"/>
+            </Style>
+            <Style x:Key="PlanCompactGroupStyle" TargetType="Grid" BasedOn="{StaticResource PlanGroupStyle}">
+                <Setter Property="Width" Value="{StaticResource PlanCompactGroupWidth}"/>
+            </Style>
+            <Style x:Key="PlanParameterRowStyle" TargetType="Border">
+                <Setter Property="Margin" Value="0,0,12,4"/>
+                <Setter Property="Padding" Value="0,2"/>
+                <Setter Property="MinHeight" Value="46"/>
+            </Style>
+            <Style x:Key="PlanFunctionCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                <Setter Property="Margin" Value="0,0,6,0"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="ContentTemplate">
+                    <Setter.Value>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding StringFormat={}{0}:}" TextWrapping="Wrap"/>
+                        </DataTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+            <Style x:Key="PlanParameterInputStyle" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignFloatingHintTextBox}">
+                <Setter Property="MinHeight" Value="36"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="VerticalContentAlignment" Value="Center"/>
+            </Style>
+            <Style x:Key="PlanParameterComboStyle" TargetType="ComboBox" BasedOn="{StaticResource MaterialDesignFloatingHintComboBox}">
+                <Setter Property="MinHeight" Value="36"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="DisplayMemberPath" Value="Value"/>
+                <Setter Property="SelectedValuePath" Value="Key"/>
+            </Style>
+            <Style x:Key="PlanParameterPasswordStyle" TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
+                <Setter Property="MinHeight" Value="36"/>
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="materialDesign:HintAssist.IsFloating" Value="True"/>
+            </Style>
+
+            <!-- 子参数显示契约：Value、Hint、InputWidth、IsChoice、Options、SelectedValue、
+                 IsBoolean、IsChecked、CheckedText；仅接收显示数据，不依赖具体产品或协议。 -->
+            <DataTemplate x:Key="PlanPreviewTextValueTemplate">
+                <TextBox Text="{Binding Value, Mode=OneWay}" ToolTip="{Binding Value}" IsReadOnly="True"
+                         Style="{StaticResource PlanParameterInputStyle}" MinHeight="22" Padding="0,0,0,4"/>
+            </DataTemplate>
+            <DataTemplate x:Key="PlanPreviewChoiceValueTemplate">
+                <ComboBox ItemsSource="{Binding Options}" SelectedValue="{Binding SelectedValue, Mode=OneWay}"
+                          Style="{StaticResource PlanParameterComboStyle}" MinHeight="22" Padding="0,0,0,4"
+                          IsHitTestVisible="False" Focusable="False" IsTabStop="False" ToolTip="{Binding Value}"/>
+            </DataTemplate>
+            <DataTemplate x:Key="PlanPreviewBooleanValueTemplate">
+                <CheckBox Content="{Binding CheckedText}" IsChecked="{Binding IsChecked, Mode=OneWay}"
+                          IsHitTestVisible="False" Focusable="False" IsTabStop="False" VerticalAlignment="Center"/>
+            </DataTemplate>
+            <DataTemplate x:Key="PlanPreviewParameterTemplate">
+                <!-- 直接使用字段定义宽度，避免绑定父容器实际宽度形成测量循环。 -->
+                <Grid MinHeight="36" Width="{Binding InputWidth}" Margin="{StaticResource PlanFieldSpacing}">
+                    <Grid.RowDefinitions><RowDefinition Height="14"/><RowDefinition Height="22"/></Grid.RowDefinitions>
+                    <!-- 与MES字段共用固定标签位置，已选下拉值不与浮动提示重叠。 -->
+                    <TextBlock Text="{Binding Hint}" FontSize="10" Foreground="{StaticResource ImdpMutedTextBrush}" VerticalAlignment="Center">
+                        <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                            <DataTrigger Binding="{Binding IsBoolean}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                        </Style.Triggers></Style></TextBlock.Style>
+                    </TextBlock>
+                    <!-- 只实例化当前参数类型的控件，避免为每个值创建三套控件后再隐藏。 -->
+                    <ContentPresenter Content="{Binding}">
+                        <ContentPresenter.Style>
+                            <Style TargetType="ContentPresenter">
+                                <Setter Property="Grid.Row" Value="1"/>
+                                <Setter Property="ContentTemplate" Value="{StaticResource PlanPreviewTextValueTemplate}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsChoice}" Value="True">
+                                        <Setter Property="ContentTemplate" Value="{StaticResource PlanPreviewChoiceValueTemplate}"/>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsBoolean}" Value="True">
+                                        <Setter Property="Grid.Row" Value="0"/>
+                                        <Setter Property="Grid.RowSpan" Value="2"/>
+                                        <Setter Property="ContentTemplate" Value="{StaticResource PlanPreviewBooleanValueTemplate}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ContentPresenter.Style>
+                    </ContentPresenter>
+                </Grid>
+            </DataTemplate>
+
+            <!-- 只读项目契约：Name、MesCode、Parameters（上述子参数显示数据）、IsComplex。 -->
+            <DataTemplate x:Key="PlanPreviewItemTemplate">
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid" BasedOn="{StaticResource PlanGroupStyle}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsComplex}" Value="True">
+                                    <Setter Property="Width" Value="{StaticResource PlanComplexGroupWidth}"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Parameters.Count}" Value="0">
+                                    <Setter Property="Width" Value="{StaticResource PlanCompactGroupWidth}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <Border Style="{StaticResource PlanParameterRowStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="{StaticResource PlanNameColumnWidth}"/>
+                                <ColumnDefinition Width="{StaticResource PlanMesColumnWidth}"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Style="{StaticResource PlanFunctionCheckBoxStyle}" Content="{Binding Name}" ToolTip="{Binding Name}"
+                                      IsChecked="True" IsHitTestVisible="False" Focusable="False" IsTabStop="False"/>
+                            <!-- 只读MES使用固定的提示位置，保持浮动提示完成后的外观。 -->
+                            <Grid Grid.Column="1" Margin="0,0,12,0" VerticalAlignment="Center" MinHeight="36">
+                                <Grid.RowDefinitions><RowDefinition Height="14"/><RowDefinition Height="22"/></Grid.RowDefinitions>
+                                <TextBlock Text="MES码" FontSize="10" Foreground="{StaticResource ImdpMutedTextBrush}" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="1" Text="{Binding MesCode, Mode=OneWay}" ToolTip="{Binding MesCode}" IsReadOnly="True">
+                                    <TextBox.Style>
+                                        <Style TargetType="TextBox" BasedOn="{StaticResource PlanParameterInputStyle}">
+                                            <Setter Property="MinHeight" Value="22"/>
+                                            <Setter Property="Padding" Value="0,0,0,4"/>
+                                        </Style>
+                                    </TextBox.Style>
+                                </TextBox>
+                            </Grid>
+                            <ItemsControl Grid.Column="2" ItemsSource="{Binding Parameters}" ItemTemplate="{StaticResource PlanPreviewParameterTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </DataTemplate>
         </ResourceDictionary>
     </Application.Resources>
 </prism:PrismApplication>

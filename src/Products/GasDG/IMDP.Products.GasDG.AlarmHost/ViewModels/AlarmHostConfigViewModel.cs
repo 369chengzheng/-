@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using IMDP.Application.DTOs;
 using IMDP.Application.Services;
 using IMDP.Products.GasDG.AlarmHost.Models;
@@ -7,6 +6,7 @@ using IMDP.Domain.Products;
 using Prism.Commands;
 using Prism.Events;
 using Prism.Navigation.Regions;
+using NLog;
 
 namespace IMDP.Products.GasDG.AlarmHost.ViewModels;
 
@@ -15,6 +15,10 @@ namespace IMDP.Products.GasDG.AlarmHost.ViewModels;
 /// </summary>
 public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
 {
+    /// <summary>
+    /// 方案操作异常的现场诊断日志，保留异常堆栈
+    /// </summary>
+    private static readonly ILogger Logger = LogManager.GetCurrentClassLogger();
     /// <summary>
     /// 当前报警主机插件，用于取得方案配置入口名称
     /// </summary>
@@ -46,7 +50,7 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
     /// </summary>
     private string? _planTypeKey;
     /// <summary>
-    /// 当前页面绑定并监听属性变化的编辑草稿
+    /// 当前页面绑定的编辑草稿
     /// </summary>
     private AlarmHostConfigDraft _draft = new();
     /// <summary>
@@ -73,14 +77,12 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
 
     public AlarmHostConfigViewModel(GasDGAlarmHostPlugin plugin, IEventAggregator eventAggregator,
         ITestPlanService plans, IMessageService messages)
-        : base(plugin, eventAggregator, FunctionModuleType.WholeSetConfig,
-            "设置与检验方案按类型分别维护；页面和控件复用，方案参数不互相覆盖。")
+        : base(plugin, eventAggregator, FunctionModuleType.WholeSetConfig)
     {
         _plugin = plugin;
         _plans = plans;
         _messages = messages;
         PageTitle = plugin.DisplayName + "方案配置（未指定类型）";
-        _draft.PropertyChanged += DraftChanged;
         RequestResetCommand = new DelegateCommand(() => ResetPending = true, () => CanEdit);
         CancelResetCommand = new DelegateCommand(() => ResetPending = false);
         ConfirmResetCommand = new DelegateCommand(ResetDraft, () => CanEdit);
@@ -92,17 +94,12 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
     }
 
     /// <summary>
-    /// 当前物料和方案类型的编辑草稿，切换实例时重新绑定变化通知
+    /// 当前物料和方案类型的编辑草稿，切换实例时通知页面重新绑定
     /// </summary>
     public AlarmHostConfigDraft Draft
     {
         get => _draft;
-        private set
-        {
-            _draft.PropertyChanged -= DraftChanged;
-            SetProperty(ref _draft, value);
-            _draft.PropertyChanged += DraftChanged;
-        }
+        private set => SetProperty(ref _draft, value);
     }
     /// <summary>
     /// 打开当前类型草稿的重置确认提示
@@ -149,10 +146,6 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
     /// </summary>
     public bool CanEdit => HasValidContext && !IsBusy;
     /// <summary>
-    /// 当前是否为检验方案，用于显示检验专属项目和列表列
-    /// </summary>
-    public bool IsInspectionPlan => _planTypeKey == "WholeGet";
-    /// <summary>
     /// 切换参数配置区域的展开或收起状态
     /// </summary>
     public DelegateCommand ToggleParametersCommand { get; }
@@ -164,6 +157,7 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
         get => _isParametersExpanded;
         private set
         {
+            if (_editingState != null) _editingState.IsParametersExpanded = value;
             if (SetProperty(ref _isParametersExpanded, value)) OnPropertyChanged(nameof(ToggleParametersToolTip));
         }
     }
@@ -181,7 +175,7 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
     }
 
     /// <summary>
-    /// 最近一次输入检查是否失败，草稿变化后清除该标记
+    /// 最近一次方案操作或回填是否失败，供操作流程选择对应提示
     /// </summary>
     public bool HasInputErrors
     {
@@ -190,7 +184,7 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
     }
 
     /// <summary>
-    /// 当前草稿的输入检查或未保存提示文本
+    /// 最近一次方案操作的反馈文本，供统一 Growl 提示使用
     /// </summary>
     public string InputCheckMessage
     {
@@ -204,10 +198,6 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
     public string PersistenceNotice => HasValidContext
         ? string.Empty
         : "缺少物料号或有效方案类型，请从首页重新进入。";
-    /// <summary>
-    /// 当前存储接入状态及草稿保留范围的说明文本
-    /// </summary>
-    public string PersistenceToolTip => "按当前物料、插件及方案类型分页查询，产品和客户编码可留空或填写关键字；选择记录回填，维护时两个编码必填，删除须选择方案并确认。";
 
     /// <summary>
     /// 当前是否正在等待查询、维护或删除结果，包含确认等待
@@ -223,24 +213,6 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
         }
     }
 
-    /// <summary>
-    /// 生产状态下拉选项，0=工厂态（生产态）、1=出厂态（用户态）
-    /// </summary>
-    public IReadOnlyList<KeyValuePair<byte, string>> ProductionStatusOptions { get; } =
-        Array.AsReadOnly(new[] { new KeyValuePair<byte, string>(0, "工厂态（生产态）"), new(1, "出厂态（用户态）") });
-    /// <summary>
-    /// 服务器地址类型下拉选项，0=IP、1=域名
-    /// </summary>
-    public IReadOnlyList<KeyValuePair<byte, string>> AddressTypeOptions { get; } =
-        Array.AsReadOnly(new[] { new KeyValuePair<byte, string>(0, "IP"), new(1, "域名") });
-    /// <summary>
-    /// 主电上报类型下拉选项，编码及名称与当前草稿输入分支对应
-    /// </summary>
-    public IReadOnlyList<KeyValuePair<byte, string>> ReportTypeOptions { get; } = Array.AsReadOnly(new[]
-    {
-        new KeyValuePair<byte, string>(0, "每天"), new(1, "单月"), new(2, "双月"), new(3, "每月"),
-        new(4, "按分"), new(5, "按时"), new(7, "指定五时"), new(8, "指定五日"), new(9, "按天")
-    });
     /// <summary>
     /// 方案列表每页条数的可选值：10、20、50
     /// </summary>
@@ -283,7 +255,7 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
     public IReadOnlyList<AlarmHostConfigListItem> CurrentPageData => _editingState?.Results ?? [];
 
     /// <summary>
-    /// 选中实际方案后回填编码、工位数量、勾选项、MES码及参数
+    /// 选中实际方案后先完整解码，再复用编辑项回填编码、工位数量、勾选项、MES码及参数
     /// 回填失败仍接受选中项并保留原草稿，删除按实际选中记录定位
     /// </summary>
     public AlarmHostConfigListItem? SelectedPlan
@@ -298,13 +270,20 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
                 {
                     var draft = AlarmHostPlanCodec.ToDraft(plan,
                         new AlarmHostPlanIdentity(MaterialNumber, PlanTypeCode!.Value, plan.ProductCode, plan.CustomerCode));
-                    Draft = draft;
-                    state.Draft = draft;
+                    Draft.ApplyFrom(draft);
+                    // 同一方案刷新保留手动折叠；首次或选中另一方案时展开供核对。
+                    var planCodes = (plan.ProductCode, plan.CustomerCode);
+                    if (state.LoadedPlanCodes != planCodes)
+                    {
+                        state.LoadedPlanCodes = planCodes;
+                        IsParametersExpanded = true;
+                    }
                     ClearInputFeedback();
                     InputCheckMessage = "方案已选中并回填，修改后可维护。";
                 }
                 catch (Exception error)
                 {
+                    Logger.Error(error, "报警方案回填失败，方案ID：{0}", plan.Id);
                     HasInputErrors = true;
                     InputCheckMessage = $"方案回填失败：{error.Message}";
                     _messages.GrowlWarning(InputCheckMessage);
@@ -335,6 +314,7 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
                 _editingStates[_planTypeKey!] = _editingState = new EditingState();
         }
         Draft = _editingState?.Draft ?? new AlarmHostConfigDraft();
+        IsParametersExpanded = _editingState?.IsParametersExpanded ?? true;
         PageTitle = _planTypeKey switch
         {
             "WholeSet" => _plugin.GetMenuDisplayName(FunctionModuleType.WholeSetConfig),
@@ -343,7 +323,6 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
         };
         ClearInputFeedback();
         foreach (var name in new[] { nameof(PlanTypeKey), nameof(PlanTypeCode), nameof(HasValidContext), nameof(CanEdit),
-                     nameof(IsInspectionPlan),
                      nameof(PersistenceNotice), nameof(PageSize) })
             OnPropertyChanged(name);
         NotifyPlanCommands();
@@ -409,6 +388,7 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
         }
         catch (Exception error)
         {
+            Logger.Error(error, "报警方案查询失败");
             if (_contextVersion != version) return;
             OnPropertyChanged(nameof(PageSize));
             HasInputErrors = true;
@@ -487,15 +467,15 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
         IsBusy = true;
         try
         {
-            var document = AlarmHostPlanFactory.FromDraft(materialNumber, planType, Draft);
-            var productCode = document.Identity.ProductCode;
-            var customerCode = document.Identity.CustomerCode;
+            var plan = AlarmHostPlanFactory.FromDraft(materialNumber, planType, Draft);
+            var productCode = plan.ProductCode;
+            var customerCode = plan.CustomerCode;
             if (new[] { materialNumber, productCode, customerCode }.Any(code => code.Length > 100))
                 throw new ArgumentException("方案定位编码不能超过100个字符。");
             if (!await ConfirmAsync($"确认维护物料 {materialNumber} 的{(planType == 0 ? "设置" : "检验")}方案 {productCode}/{customerCode}？")) return;
             if (!IsCurrent(materialNumber, planType, productCode, customerCode, state, version)) return;
             await _plans.SaveWholeConfigAsync(planType, productCode, customerCode, _plugin.Category,
-                _plugin.ProductKey, materialNumber, document.ToPlanDto());
+                _plugin.ProductKey, materialNumber, plan);
             if (!IsCurrent(materialNumber, planType, productCode, customerCode, state, version)) return;
             saved = true;
             if (!await LoadQueryPageAsync(1, productCode, customerCode, state.PageSize) || HasInputErrors) return;
@@ -505,6 +485,7 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
         }
         catch (Exception error)
         {
+            Logger.Error(error, "报警方案维护或刷新失败，已保存：{0}", saved);
             if (_contextVersion != version) return;
             HasInputErrors = true;
             InputCheckMessage = saved ? $"方案已维护，列表刷新失败：{error.Message}" : $"方案操作失败：{error.Message}";
@@ -548,6 +529,7 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
         }
         catch (Exception error)
         {
+            Logger.Error(error, "报警方案删除或刷新失败，已处理：{0}", processed);
             if (_contextVersion != version) return;
             HasInputErrors = true;
             InputCheckMessage = processed ? $"删除已处理，列表刷新失败：{error.Message}" : $"方案删除失败：{error.Message}";
@@ -610,22 +592,18 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
     }
 
     /// <summary>
-    /// 草稿发生变化时清除旧错误标记，提示当前修改尚未保存
-    /// </summary>
-    private void DraftChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        HasInputErrors = false;
-        InputCheckMessage = "修改尚未保存。";
-    }
-
-    /// <summary>
     /// 将当前类型的草稿恢复默认值并更新缓存，同时取消列表选中，不删除已保存方案或清空查询列表
     /// </summary>
     private void ResetDraft()
     {
         SelectedPlan = null;
         Draft = new AlarmHostConfigDraft();
-        if (_editingState != null) _editingState.Draft = Draft;
+        if (_editingState != null)
+        {
+            _editingState.Draft = Draft;
+            _editingState.LoadedPlanCodes = null;
+        }
+        IsParametersExpanded = true;
         ClearInputFeedback();
     }
 
@@ -645,6 +623,14 @@ public sealed class AlarmHostConfigViewModel : AlarmHostPageViewModel
         /// 当前物料某一种方案类型的独立编辑草稿
         /// </summary>
         public AlarmHostConfigDraft Draft { get; set; } = new();
+        /// <summary>
+        /// 当前类型参数区的会话内展开状态，查询同一方案时保留
+        /// </summary>
+        public bool IsParametersExpanded { get; set; } = true;
+        /// <summary>
+        /// 最近成功回填的方案编码，用于在切换方案时重新展开参数区
+        /// </summary>
+        public (string ProductCode, string CustomerCode)? LoadedPlanCodes { get; set; }
         /// <summary>
         /// 当前页方案的列表投影
         /// </summary>

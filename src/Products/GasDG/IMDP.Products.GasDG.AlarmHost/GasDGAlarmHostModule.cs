@@ -1,4 +1,5 @@
 using IMDP.Application.Services;
+using IMDP.Products.GasDG.AlarmHost.Services;
 using IMDP.Products.GasDG.AlarmHost.ViewModels;
 using IMDP.Products.GasDG.AlarmHost.Views;
 using Prism.Ioc;
@@ -14,6 +15,7 @@ public sealed class GasDGAlarmHostModule : IModule
     public void RegisterTypes(IContainerRegistry containerRegistry)
     {
         containerRegistry.RegisterSingleton<GasDGAlarmHostPlugin>();
+        containerRegistry.Register<AlarmHostExecutionService>();
         containerRegistry.RegisterForNavigation<AlarmHostConfigView, AlarmHostConfigViewModel>();
         containerRegistry.RegisterForNavigation<AlarmHostView, AlarmHostViewModel>();
     }

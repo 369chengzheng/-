@@ -47,8 +47,6 @@ public static class AlarmHostPlanCodec
             if (!item.IsEnabled) continue;
             var definition = AlarmHostFunctionCatalog.All.FirstOrDefault(function => function.Key == item.Code);
             if (definition == null) throw new InvalidOperationException("方案包含未支持的功能项目。");
-            if (!definition.Supports(plan.PlanType))
-                throw new InvalidOperationException($"{definition.DisplayName}不适用于当前方案类型。");
             if (!selectedKeys.Add(item.Code))
                 throw new InvalidOperationException($"{definition.DisplayName}项目重复。");
             if (item.Parameters == null)
@@ -73,7 +71,7 @@ public static class AlarmHostPlanCodec
             }
             var required = AlarmHostFunctionCatalog.ActiveParameters(target.ToDto()).Select(parameter => parameter.Code).ToArray();
             foreach (var key in required)
-                if (!values.ContainsKey(key))
+                if (!values.ContainsKey(key) && item.Code is not (AlarmHostFunctionCatalog.Csq or AlarmHostFunctionCatalog.Version))
                     throw new InvalidOperationException($"{definition.DisplayName}缺少 {key} 参数。");
             if (values.Keys.Except(required, StringComparer.Ordinal).Any())
                 throw new InvalidOperationException($"{definition.DisplayName}包含当前分支尚未支持的子参数，请核对方案。");

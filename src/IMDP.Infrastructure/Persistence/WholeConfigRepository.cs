@@ -413,24 +413,21 @@ public class WholeConfigRepository : SplitTableRepository<WholeConfig>, IWholeCo
     /// <summary>
     /// 比较实际业务内容，忽略 JSON 空白和对象属性顺序，数组项目顺序仍保留
     /// </summary>
-    internal static bool SameContent(WholeConfig config, int stationCount, string parametersJson) =>
-        config.StationCount == stationCount && JToken.DeepEquals(JToken.Parse(config.ParametersJson), JToken.Parse(parametersJson));
+    internal static bool SameContent(WholeConfig config, int stationCount, string parametersJson)
+    {
+        if (config.StationCount != stationCount) return false;
+        var incoming = JToken.Parse(parametersJson);
+        try { return JToken.DeepEquals(JToken.Parse(config.ParametersJson), incoming); }
+        catch (JsonException) { return false; }
+    }
 
     /// <summary>
-    /// 审计沿用原整机快照格式，密码参数的值和默认值均遮罩
+    /// 审计沿用原整机快照格式，参数JSON及密码值按用户要求保留原文
+    /// 外层快照序列化字符串，不因参数JSON损坏而阻断修复或软删除
     /// </summary>
     internal static string AuditSnapshot(WholeConfig config)
     {
-        var parameters = JArray.Parse(config.ParametersJson);
-        foreach (var node in parameters.Descendants().OfType<JObject>())
-            if (((string?)node["Code"])?.Contains("Password", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                node["Value"] = "***";
-                if (node["DefaultValue"] != null) node["DefaultValue"] = "***";
-            }
-        var snapshot = JObject.FromObject(config);
-        snapshot[nameof(WholeConfig.ParametersJson)] = parameters.ToString(Formatting.None);
-        return snapshot.ToString(Formatting.None);
+        return JObject.FromObject(config).ToString(Formatting.None);
     }
 
 }

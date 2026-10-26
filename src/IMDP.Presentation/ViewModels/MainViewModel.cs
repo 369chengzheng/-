@@ -188,6 +188,7 @@ public partial class MainViewModel : ObservableObject, INavigationAware
             {
                 OrderNumber = requestedOrderNumber,
                 MaterialNumber = resolvedMaterialNumber,
+                ProductName = queriedProductInfo?.ProductName?.Trim() ?? string.Empty,
                 RawModules = moduleSnapshot,
                 RawMenuItems = menuSnapshot,
                 OperatorWorkNumber = _currentContext.UserName,

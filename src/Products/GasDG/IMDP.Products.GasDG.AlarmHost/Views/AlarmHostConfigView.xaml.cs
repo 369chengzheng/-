@@ -24,6 +24,10 @@ public partial class AlarmHostConfigView : UserControl
     /// </summary>
     private AlarmHostConfigDraft? _draft;
     /// <summary>
+    /// 专用网络模板当前显示的密码框，随模板加载和卸载更新
+    /// </summary>
+    private PasswordBox? _networkPasswordInput;
+    /// <summary>
     /// 是否正在将草稿密码同步到 PasswordBox，用于避免回写时重入
     /// </summary>
     private bool _syncingPassword;
@@ -35,10 +39,15 @@ public partial class AlarmHostConfigView : UserControl
     /// 是否正在更新方案表格宽度，用于避免布局回调重入
     /// </summary>
     private bool _updatingSchemeWidth;
+    /// <summary>
+    /// 参数区展开时的行高比例，收起前保存，展开后恢复用户拖动的位置
+    /// </summary>
+    private GridLength _expandedParameterHeight = new(4, GridUnitType.Star);
 
     public AlarmHostConfigView()
     {
         InitializeComponent();
+        AddPlanColumns();
         DataContextChanged += (_, _) => AttachPassword();
         Loaded += (_, _) =>
         {
@@ -75,9 +84,8 @@ public partial class AlarmHostConfigView : UserControl
     {
         if (e.PropertyName == nameof(AlarmHostConfigViewModel.Draft)) AttachDraft();
         if (e.PropertyName == nameof(AlarmHostConfigViewModel.IsParametersExpanded)) UpdateParameterRow();
-        if (e.PropertyName == nameof(AlarmHostConfigViewModel.IsInspectionPlan))
+        if (e.PropertyName == nameof(AlarmHostConfigViewModel.PlanTypeKey))
         {
-            UpdatePlanColumns();
             SchemeGrid.UnselectAll();
             SchemeHorizontalScroll.ScrollToLeftEnd();
             ParameterScroll.ScrollToTop();
@@ -99,51 +107,63 @@ public partial class AlarmHostConfigView : UserControl
 
     private void SyncPassword()
     {
+        if (_networkPasswordInput == null) return;
         var password = _draft?.Items[AlarmHostFunctionCatalog.MainNetwork].Values["Password"].Value ?? "";
-        if (NetworkPasswordInput.Password == password) return;
+        if (_networkPasswordInput.Password == password) return;
         _syncingPassword = true;
-        try { NetworkPasswordInput.Password = password; }
+        try { _networkPasswordInput.Password = password; }
         finally { _syncingPassword = false; }
+    }
+
+    /// <summary>
+    /// 密码框位于模板名称域，加载后连接现有草稿同步逻辑
+    /// </summary>
+    private void NetworkPasswordLoaded(object sender, RoutedEventArgs e)
+    {
+        _networkPasswordInput = (PasswordBox)sender;
+        SyncPassword();
+    }
+
+    private void NetworkPasswordUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (ReferenceEquals(_networkPasswordInput, sender)) _networkPasswordInput = null;
     }
 
     private void NetworkPasswordChanged(object sender, RoutedEventArgs e)
     {
-        if (!_syncingPassword && _draft != null) _draft.Items[AlarmHostFunctionCatalog.MainNetwork].Values["Password"].Value = NetworkPasswordInput.Password;
+        if (!_syncingPassword && _draft != null) _draft.Items[AlarmHostFunctionCatalog.MainNetwork].Values["Password"].Value = ((PasswordBox)sender).Password;
     }
 
-    private void ParameterScrollChanged(object sender, ScrollChangedEventArgs e)
-    {
-        if (e.ViewportWidthChange == 0 || ParameterScroll.ViewportWidth <= 0) return;
-        // 必须按受约束的视口计算，而不是按 WrapPanel 自身宽度；后者会被旧 ItemWidth
-        // 反向撑大，造成从宽窗口缩窄时复杂行仍停留在旧宽度。
-        var width = ParameterScroll.ViewportWidth;
-        var columns = Math.Clamp((int)(width / 360), 1, 4);
-        SettingRows.ItemWidth = InspectionRows.ItemWidth = Math.Floor(width / columns);
-        ComplexRows.ItemWidth = Math.Floor(width / Math.Clamp((int)(width / 720), 1, 2));
-    }
-
+    /// <summary>
+    /// 收起时释放参数区空间，展开时恢复原比例，不重置原生分界线的拖动结果
+    /// </summary>
     private void UpdateParameterRow()
     {
         if (ParameterRowDefinition == null) return;
         var expanded = _viewModel?.IsParametersExpanded ?? true;
-        ParameterRowDefinition.Height = expanded ? new GridLength(4, GridUnitType.Star) : GridLength.Auto;
-        ParameterRowDefinition.MinHeight = expanded ? 72 : 0;
+        if (expanded)
+        {
+            if (ParameterRowDefinition.Height.IsAuto) ParameterRowDefinition.Height = _expandedParameterHeight;
+        }
+        else
+        {
+            if (ParameterRowDefinition.Height.IsStar) _expandedParameterHeight = ParameterRowDefinition.Height;
+            ParameterRowDefinition.Height = GridLength.Auto;
+        }
+        ParameterRowDefinition.MinHeight = expanded ? 130 : 0;
     }
 
+    /// <summary>
+    /// 固定宽度的查询字段自行换行，窄窗口将操作按钮移至独立一行
+    /// </summary>
     private void QueryLayoutSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        // 文档宽屏同一行；小窗口下操作移到第二行，避免压窄两个方案编码输入。
-        var stacked = e.NewSize.Width < 1000;
+        var stacked = e.NewSize.Width < 1100;
         Grid.SetColumnSpan(QueryFields, stacked ? 2 : 1);
         Grid.SetRow(QueryActions, stacked ? 1 : 0);
         Grid.SetColumn(QueryActions, stacked ? 0 : 1);
         Grid.SetColumnSpan(QueryActions, stacked ? 2 : 1);
         QueryActions.Margin = stacked ? new Thickness(0, 8, 0, 0) : new Thickness(0);
-    }
-
-    private void QueryFieldsSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        if (e.NewSize.Width > 0) QueryFields.ItemWidth = Math.Min(380, Math.Floor(e.NewSize.Width / 2));
     }
 
     private void AttachColumnWidths()
@@ -173,10 +193,27 @@ public partial class AlarmHostConfigView : UserControl
         {
             if (column.Binding is not Binding { Path.Path: var path } || !path.StartsWith("Items[", StringComparison.Ordinal)) continue;
             var key = path[6..^1];
-            column.Visibility = AlarmHostFunctionCatalog.Get(key).InspectionOnly && _viewModel?.IsInspectionPlan != true
-                ? Visibility.Collapsed : Visibility.Visible;
+            var definition = AlarmHostFunctionCatalog.Get(key);
+            column.Header = definition.DisplayName;
         }
         UpdateSchemeWidth();
+    }
+
+    /// <summary>
+    /// 为目录新增项补充列表列，保留原有列宽和标识列，后续新增功能无需复制XAML列
+    /// </summary>
+    private void AddPlanColumns()
+    {
+        var existing = SchemeGrid.Columns.OfType<DataGridTextColumn>()
+            .Select(column => (column.Binding as Binding)?.Path?.Path)
+            .Where(path => path?.StartsWith("Items[", StringComparison.Ordinal) == true).ToHashSet();
+        var insertAt = 2 + existing.Count;
+        foreach (var item in AlarmHostFunctionCatalog.All.Where(item => !existing.Contains($"Items[{item.Key}]")))
+            SchemeGrid.Columns.Insert(insertAt++, new DataGridTextColumn
+            {
+                Header = item.DisplayName, Binding = new Binding($"Items[{item.Key}]"),
+                Width = 150, MinWidth = 60, ElementStyle = (Style)FindResource("SchemeCellText")
+            });
     }
 
     private void UpdateSchemeWidth()

@@ -352,6 +352,23 @@ public static class FrameComposer
     }
 
     /// <summary>
+    /// 从缓冲区读取指定字段（小端序），由协议调用方明确选用
+    /// </summary>
+    /// <param name="buffer">数据缓冲区。</param>
+    /// <param name="offset">帧起始偏移量。</param>
+    /// <param name="field">字段配置。</param>
+    /// <returns>字段整数值。</returns>
+    public static int ReadFieldLittleEndian(byte[] buffer, int offset, FieldConfig field)
+    {
+        int value = 0;
+        for (int i = field.Length - 1; i >= 0; i--)
+        {
+            value = (value << 8) | buffer[offset + field.Offset + i];
+        }
+        return value;
+    }
+
+    /// <summary>
     /// 向缓冲区写入指定字段（大端序）
     /// </summary>
     /// <param name="buffer">数据缓冲区。</param>
@@ -360,6 +377,21 @@ public static class FrameComposer
     private static void WriteField(byte[] buffer, FieldConfig field, int value)
     {
         for (int i = field.Length - 1; i >= 0; i--)
+        {
+            buffer[field.Offset + i] = (byte)(value & 0xFF);
+            value >>= 8;
+        }
+    }
+
+    /// <summary>
+    /// 向缓冲区写入指定字段（小端序），由协议调用方明确选用
+    /// </summary>
+    /// <param name="buffer">数据缓冲区。</param>
+    /// <param name="field">字段配置。</param>
+    /// <param name="value">待写入的整数值。</param>
+    public static void WriteFieldLittleEndian(byte[] buffer, FieldConfig field, int value)
+    {
+        for (int i = 0; i < field.Length; i++)
         {
             buffer[field.Offset + i] = (byte)(value & 0xFF);
             value >>= 8;

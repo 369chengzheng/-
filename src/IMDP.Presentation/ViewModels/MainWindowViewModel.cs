@@ -107,6 +107,16 @@ public partial class MainWindowViewModel : ObservableObject
     /// <summary>当前软件物料号（由主界面查询时发布的事件更新，用于菜单导航时传递给目标视图）</summary>
     private string _currentMaterialNumber = string.Empty;
 
+    /// <summary>
+    /// 当前已经生效的制令单号，不从首页尚未查询的输入框取值
+    /// </summary>
+    private string _currentOrderNumber = string.Empty;
+
+    /// <summary>
+    /// 当前已生效制令单返回的MES产品名称，手动物料查询时清空
+    /// </summary>
+    private string _currentProductName = string.Empty;
+
     /// <summary>菜单弹窗开关命令</summary>
     public IRelayCommand MenuCommand { get; }
     /// <summary>返回主页命令（清空主区域并导航至主视图）</summary>
@@ -169,6 +179,7 @@ public partial class MainWindowViewModel : ObservableObject
         _eventAggregator.GetEvent<NavigateToModuleEvent>().Subscribe(OnNavigateToModule, ThreadOption.UIThread);
         _eventAggregator.GetEvent<HomeMenuResolvedEvent>().Subscribe(OnHomeMenuResolved, ThreadOption.UIThread);
         _eventAggregator.GetEvent<GoHomeEvent>().Subscribe(OnGoHome, ThreadOption.UIThread);
+        _eventAggregator.GetEvent<EndWorkOrderEvent>().Subscribe(OnEndWorkOrder, ThreadOption.UIThread);
         _eventAggregator.GetEvent<UserRoleChangedEvent>().Subscribe(OnUserRoleChanged, ThreadOption.UIThread);
     }
 
@@ -202,6 +213,8 @@ public partial class MainWindowViewModel : ObservableObject
             _allMenuItems = candidateRawMenus;
             MenuItems = new ObservableCollection<ProductMenuItemDto>(candidateVisibleMenus);
             _currentMaterialNumber = payload.MaterialNumber.Trim();
+            _currentOrderNumber = payload.OrderNumber.Trim();
+            _currentProductName = string.IsNullOrEmpty(_currentOrderNumber) ? string.Empty : payload.ProductName.Trim();
 
             // 手动物料查询没有制令单号，不属于工单切换；同时结束之前的活动工单状态
             if (string.IsNullOrWhiteSpace(payload.OrderNumber))
@@ -304,7 +317,11 @@ public partial class MainWindowViewModel : ObservableObject
         {
             ViewName = viewName,
             PlanType = planType,
-            MaterialNumber = _currentMaterialNumber
+            MaterialNumber = _currentMaterialNumber,
+            ProductName = _currentProductName,
+            OrderNumber = _currentOrderNumber,
+            ResourceCode = Station,
+            OperatorWorkNumber = WorkNumber
         };
         _eventAggregator.GetEvent<NavigateToModuleEvent>().Publish(payload);
     }
@@ -363,6 +380,10 @@ public partial class MainWindowViewModel : ObservableObject
         {
             parameters.Add("MaterialNumber", payload.MaterialNumber);
         }
+        parameters.Add("OrderNumber", payload.OrderNumber);
+        parameters.Add("ProductName", payload.ProductName);
+        parameters.Add("ResourceCode", payload.ResourceCode);
+        parameters.Add("OperatorWorkNumber", payload.OperatorWorkNumber);
         _regionManager.RequestNavigate("MainContentRegion", payload.ViewName, parameters);
     }
 
@@ -383,6 +404,8 @@ public partial class MainWindowViewModel : ObservableObject
 
         // 清空当前软件物料号，避免后续导航携带上一会话的物料号
         _currentMaterialNumber = string.Empty;
+        _currentOrderNumber = string.Empty;
+        _currentProductName = string.Empty;
 
         Station = payload.Station;
         WorkNumber = payload.WorkNumber;
@@ -403,6 +426,8 @@ public partial class MainWindowViewModel : ObservableObject
         _orderSwitchRecordService.ResetSession();
         _allMenuItems.Clear();
         _currentMaterialNumber = string.Empty;
+        _currentOrderNumber = string.Empty;
+        _currentProductName = string.Empty;
 
         Station = string.Empty;
         WorkNumber = string.Empty;
@@ -459,6 +484,20 @@ public partial class MainWindowViewModel : ObservableObject
             mainContentRegion.Remove(view);
         }
         _regionManager.RequestNavigate("MainContentRegion", "MainView");
+    }
+
+    /// <summary>
+    /// 结束已生效工单并重新进入空首页，后续必须重新查询物料或制令单
+    /// </summary>
+    private void OnEndWorkOrder()
+    {
+        _orderSwitchRecordService.ResetSession();
+        _currentOrderNumber = string.Empty;
+        _currentMaterialNumber = string.Empty;
+        _currentProductName = string.Empty;
+        _allMenuItems.Clear();
+        MenuItems.Clear();
+        OnGoHome();
     }
 
     /// <summary>

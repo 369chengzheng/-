@@ -11,9 +11,10 @@ namespace IMDP.Products.GasDG.AlarmHost.Services;
 public static class AlarmHostPlanFactory
 {
     /// <summary>
-    /// 检查草稿并生成独立方案副本，仅包含当前类型适用且已勾选的功能及有效分支参数
+    /// 检查草稿并生成公共方案 DTO 快照，逐项复制后仅保留已勾选功能及有效分支参数
+    /// 设置与检验分别保存方案，两类方案均可选择目录中的全部功能
     /// </summary>
-    public static AlarmHostPlanDocument FromDraft(string materialNumber, int planType, AlarmHostConfigDraft draft)
+    public static TestPlanDto FromDraft(string materialNumber, int planType, AlarmHostConfigDraft draft)
     {
         ArgumentNullException.ThrowIfNull(draft);
         var errors = draft.GetInputErrors();
@@ -24,7 +25,6 @@ public static class AlarmHostPlanFactory
         {
             var source = draft.Items[definition.Key];
             if (!source.IsEnabled) continue;
-            if (!definition.Supports(planType)) throw new ArgumentException("当前方案类型不允许所选项目");
             var item = source.ToDto();
             item.MesCode = item.MesCode.Trim();
             item.Order = items.Count + 1;
@@ -33,12 +33,12 @@ public static class AlarmHostPlanFactory
             items.Add(item);
         }
         if (items.Count == 0) throw new ArgumentException("方案至少应启用一个适用项目");
-        return new AlarmHostPlanDocument(identity, new TestPlanDto
+        return new TestPlanDto
         {
             ProductKey = identity.ProductKey,
             MaterialNumber = identity.MaterialNumber, ProductCode = identity.ProductCode,
             CustomerCode = identity.CustomerCode, Category = ProductCategory.GasDG, PlanType = identity.PlanType,
             StationCount = int.Parse(draft.StationCount.Trim(), CultureInfo.InvariantCulture), Parameters = items
-        });
+        };
     }
 }

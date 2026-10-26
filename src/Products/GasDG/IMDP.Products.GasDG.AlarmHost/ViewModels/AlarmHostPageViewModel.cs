@@ -8,7 +8,7 @@ using Prism.Navigation.Regions;
 namespace IMDP.Products.GasDG.AlarmHost.ViewModels;
 
 /// <summary>
-/// 插件骨架页面的只读上下文；不加载方案或执行检测。
+/// 报警页面共用的物料上下文、标题及首页导航
 /// </summary>
 public abstract class AlarmHostPageViewModel : ObservableObject, INavigationAware
 {
@@ -18,6 +18,10 @@ public abstract class AlarmHostPageViewModel : ObservableObject, INavigationAwar
     /// </summary>
     private string _materialNumber = string.Empty;
     /// <summary>
+    /// 首页制令单查询返回的MES产品名称，手动物料导航不携带
+    /// </summary>
+    private string _productName = string.Empty;
+    /// <summary>
     /// 当前页面标题的绑定存储值
     /// </summary>
     private string _pageTitle = string.Empty;
@@ -25,12 +29,10 @@ public abstract class AlarmHostPageViewModel : ObservableObject, INavigationAwar
     protected AlarmHostPageViewModel(
         GasDGAlarmHostPlugin plugin,
         IEventAggregator eventAggregator,
-        FunctionModuleType moduleType,
-        string description)
+        FunctionModuleType moduleType)
     {
         PageTitle = plugin.GetMenuDisplayName(moduleType);
         ProductKey = plugin.ProductKey;
-        Description = description;
         GoHomeCommand = new DelegateCommand(() => eventAggregator.GetEvent<GoHomeEvent>().Publish());
     }
 
@@ -50,18 +52,6 @@ public abstract class AlarmHostPageViewModel : ObservableObject, INavigationAwar
     /// </summary>
     public string ProductKey { get; }
     /// <summary>
-    /// 当前页面的功能说明文本
-    /// </summary>
-    public string Description { get; }
-    /// <summary>
-    /// 执行页骨架的功能状态提示
-    /// </summary>
-    public string StatusText => "功能尚未实现";
-    /// <summary>
-    /// 当前基础阶段已接入范围及待接入功能的提示
-    /// </summary>
-    public string StageNotice => "当前仅验证插件加载、菜单和页面导航。方案查询与维护、设备通信、检测判定及 MES 上传尚未接入。";
-    /// <summary>
     /// 返回首页的导航命令
     /// </summary>
     public DelegateCommand GoHomeCommand { get; }
@@ -77,24 +67,27 @@ public abstract class AlarmHostPageViewModel : ObservableObject, INavigationAwar
             if (SetProperty(ref _materialNumber, value))
             {
                 OnPropertyChanged(nameof(BreadcrumbTitle));
-                OnPropertyChanged(nameof(MaterialNumberDisplay));
             }
         }
     }
 
     /// <summary>
-    /// 由当前物料号和页面标题组成的面包屑文本
+    /// 首页导航传入的MES产品名称，只用于显示，不参与方案定位
     /// </summary>
-    public string BreadcrumbTitle => string.IsNullOrEmpty(MaterialNumber)
-        ? PageTitle
-        : $"{MaterialNumber} > {PageTitle}";
+    public string ProductName
+    {
+        get => _productName;
+        private set
+        {
+            if (SetProperty(ref _productName, value)) OnPropertyChanged(nameof(BreadcrumbTitle));
+        }
+    }
 
     /// <summary>
-    /// 物料号的页面显示文本，缺失时给出首页操作提示
+    /// 按物料号、MES产品名称及当前页面名组合导航，空产品名称不占一层
     /// </summary>
-    public string MaterialNumberDisplay => string.IsNullOrEmpty(MaterialNumber)
-        ? "未提供（请先在首页查询工单或软件物料号）"
-        : MaterialNumber;
+    public string BreadcrumbTitle => string.Join(" > ",
+        new[] { MaterialNumber, ProductName, PageTitle }.Where(value => !string.IsNullOrEmpty(value)));
 
     public bool IsNavigationTarget(NavigationContext navigationContext) => true;
 
@@ -102,6 +95,7 @@ public abstract class AlarmHostPageViewModel : ObservableObject, INavigationAwar
     {
         // 缺少物料参数时也清除旧值，避免页面重用后显示上一次物料。
         MaterialNumber = (navigationContext.Parameters.GetValue<object>("MaterialNumber") as string)?.Trim() ?? string.Empty;
+        ProductName = (navigationContext.Parameters.GetValue<object>("ProductName") as string)?.Trim() ?? string.Empty;
     }
 
     public virtual void OnNavigatedFrom(NavigationContext navigationContext) { }

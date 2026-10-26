@@ -2,36 +2,11 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:prism="http://prismlibrary.com/"
+             xmlns:models="clr-namespace:IMDP.Products.GasDG.AlarmHost.Models"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              prism:ViewModelLocator.AutoWireViewModel="True">
     <UserControl.Resources>
-        <!-- 仅本插件：紧凑检测项横排，沿用平台配置页的控件和语义色。 -->
-        <Style x:Key="ParameterRow" TargetType="Border">
-            <Setter Property="Margin" Value="0,0,12,4"/>
-            <Setter Property="Padding" Value="0,2"/>
-            <Setter Property="MinHeight" Value="46"/>
-        </Style>
-        <Style x:Key="ParameterInput" TargetType="TextBox" BasedOn="{StaticResource MaterialDesignFloatingHintTextBox}">
-            <Setter Property="MinHeight" Value="36"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-        </Style>
-        <Style x:Key="ParameterCombo" TargetType="ComboBox" BasedOn="{StaticResource MaterialDesignFloatingHintComboBox}">
-            <Setter Property="MinHeight" Value="36"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="DisplayMemberPath" Value="Value"/>
-            <Setter Property="SelectedValuePath" Value="Key"/>
-        </Style>
-        <Style x:Key="ParameterPassword" TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
-            <Setter Property="MinHeight" Value="36"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="materialDesign:HintAssist.IsFloating" Value="True"/>
-        </Style>
-        <Style x:Key="RowHint" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Foreground" Value="{StaticResource ImdpMutedTextBrush}"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-        </Style>
+        <!-- 页面操作、列表样式及无参数项模板；尺寸继续复用公共方案资源。 -->
         <Style x:Key="DraftActionButton" TargetType="Button" BasedOn="{StaticResource SemanticButtonBaseStyle}">
             <Setter Property="Width" Value="86"/><Setter Property="Height" Value="28"/>
             <Setter Property="Margin" Value="0,0,8,0"/><Setter Property="FontSize" Value="12"/>
@@ -42,6 +17,164 @@
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
             <Setter Property="ToolTip" Value="{Binding RelativeSource={RelativeSource Self}, Path=Text}"/>
         </Style>
+        <DataTemplate x:Key="NoParameterItemTemplate">
+            <Grid Style="{StaticResource PlanCompactGroupStyle}">
+                <Border Style="{StaticResource PlanParameterRowStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="{StaticResource PlanNameColumnWidth}"/><ColumnDefinition Width="{StaticResource PlanMesColumnWidth}"/></Grid.ColumnDefinitions>
+                        <CheckBox Style="{StaticResource PlanFunctionCheckBoxStyle}" Content="{Binding Name}" IsChecked="{Binding IsEnabled}"/>
+                        <TextBox Grid.Column="1" x:Name="MesInput" Style="{StaticResource PlanParameterInputStyle}" materialDesign:HintAssist.Hint="MES码"
+                                 Text="{Binding MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsEnabled}" Margin="0,0,12,0"/>
+                    </Grid>
+                </Border>
+            </Grid>
+        </DataTemplate>
+        <!-- 普通参数只维护一份模板，直接编辑当前草稿的公共DTO值。 -->
+        <DataTemplate x:Key="ParameterTextValueTemplate">
+            <TextBox MinHeight="22" Padding="0,0,0,4" Style="{StaticResource PlanParameterInputStyle}"
+                     Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"/>
+        </DataTemplate>
+        <DataTemplate x:Key="ParameterChoiceValueTemplate">
+            <ComboBox MinHeight="22" Padding="0,0,0,4" Style="{StaticResource PlanParameterComboStyle}"
+                      ItemsSource="{Binding Options}" SelectedValue="{Binding ByteValue}"/>
+        </DataTemplate>
+        <DataTemplate x:Key="ParameterBooleanValueTemplate">
+            <CheckBox Content="{Binding CheckedText}" IsChecked="{Binding BooleanValue}" VerticalAlignment="Center"/>
+        </DataTemplate>
+        <DataTemplate x:Key="ParameterValueTemplate">
+            <Grid Width="{Binding InputWidth}" MinHeight="36" Margin="{StaticResource PlanFieldSpacing}">
+                <Grid.RowDefinitions><RowDefinition Height="14"/><RowDefinition Height="22"/></Grid.RowDefinitions>
+                <TextBlock Text="{Binding InputHint}" FontSize="10" Foreground="{StaticResource ImdpMutedTextBrush}" VerticalAlignment="Center">
+                    <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
+                        <DataTrigger Binding="{Binding IsBoolean}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                    </Style.Triggers></Style></TextBlock.Style>
+                </TextBlock>
+                <!-- 与只读预览相同，每个参数只实例化当前类型的编辑控件。 -->
+                <ContentPresenter Content="{Binding}">
+                    <ContentPresenter.Style>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="Grid.Row" Value="1"/>
+                            <Setter Property="ContentTemplate" Value="{StaticResource ParameterTextValueTemplate}"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChoice}" Value="True"><Setter Property="ContentTemplate" Value="{StaticResource ParameterChoiceValueTemplate}"/></DataTrigger>
+                                <DataTrigger Binding="{Binding IsBoolean}" Value="True">
+                                    <Setter Property="Grid.Row" Value="0"/><Setter Property="Grid.RowSpan" Value="2"/>
+                                    <Setter Property="ContentTemplate" Value="{StaticResource ParameterBooleanValueTemplate}"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ContentPresenter.Style>
+                </ContentPresenter>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="CommonParameterItemTemplate">
+            <Grid>
+                <Grid.Style>
+                    <Style TargetType="Grid" BasedOn="{StaticResource PlanGroupStyle}">
+                        <Style.Triggers><DataTrigger Binding="{Binding IsComplex}" Value="True"><Setter Property="Width" Value="{StaticResource PlanComplexGroupWidth}"/></DataTrigger></Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Border Style="{StaticResource PlanParameterRowStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="{StaticResource PlanNameColumnWidth}"/><ColumnDefinition Width="{StaticResource PlanMesColumnWidth}"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <CheckBox Style="{StaticResource PlanFunctionCheckBoxStyle}" Content="{Binding Name}" IsChecked="{Binding IsEnabled}"/>
+                        <TextBox Grid.Column="1" x:Name="MesInput" Style="{StaticResource PlanParameterInputStyle}" materialDesign:HintAssist.Hint="MES码"
+                                 Text="{Binding MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding IsEnabled}" Margin="0,0,12,0"/>
+                        <ItemsControl Grid.Column="2" ItemsSource="{Binding Values.Values}" ItemTemplate="{StaticResource ParameterValueTemplate}" IsEnabled="{Binding IsEnabled}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </Grid>
+                </Border>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="MainServerParameterTemplate">
+            <Grid Style="{StaticResource PlanComplexGroupStyle}" DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                <Border Style="{StaticResource PlanParameterRowStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="{StaticResource PlanNameColumnWidth}"/><ColumnDefinition Width="{StaticResource PlanMesColumnWidth}"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <CheckBox Style="{StaticResource PlanFunctionCheckBoxStyle}" Content="{Binding Draft.Items[MainServer].Name}" IsChecked="{Binding Draft.Items[MainServer].IsEnabled}"/>
+                        <TextBox Grid.Column="1" x:Name="MainServerMesInput" Style="{StaticResource PlanParameterInputStyle}" materialDesign:HintAssist.Hint="MES码"
+                                 Text="{Binding Draft.Items[MainServer].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[MainServer].IsEnabled}" Margin="0,0,12,0"/>
+                        <WrapPanel Grid.Column="2" IsEnabled="{Binding Draft.Items[MainServer].IsEnabled}">
+                            <ComboBox Width="{Binding Draft.Items[MainServer].Values[AddressType].InputWidth}" Style="{StaticResource PlanParameterComboStyle}" ItemsSource="{Binding Draft.Items[MainServer].Values[AddressType].Options}" SelectedValue="{Binding Draft.Items[MainServer].Values[AddressType].ByteValue}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainServer].Values[AddressType].InputHint}" Margin="{StaticResource PlanFieldSpacing}"/>
+                            <TextBox x:Name="ServerAddressInput" Width="{Binding Draft.Items[MainServer].Values[Address].InputWidth}" Style="{StaticResource PlanParameterInputStyle}" Text="{Binding Draft.Items[MainServer].Values[Address].Value, UpdateSourceTrigger=PropertyChanged}" ToolTip="IP 或域名" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainServer].Values[Address].InputHint}" Margin="{StaticResource PlanFieldSpacing}"/>
+                            <TextBox Width="{Binding Draft.Items[MainServer].Values[Port].InputWidth}" Style="{StaticResource PlanParameterInputStyle}" Text="{Binding Draft.Items[MainServer].Values[Port].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainServer].Values[Port].InputHint}" Margin="{StaticResource PlanFieldSpacing}"/>
+                        </WrapPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="MainNetworkParameterTemplate">
+            <Grid Style="{StaticResource PlanComplexGroupStyle}" DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                <Border Style="{StaticResource PlanParameterRowStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="{StaticResource PlanNameColumnWidth}"/><ColumnDefinition Width="{StaticResource PlanMesColumnWidth}"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <CheckBox Style="{StaticResource PlanFunctionCheckBoxStyle}" Content="{Binding Draft.Items[MainNetwork].Name}" IsChecked="{Binding Draft.Items[MainNetwork].IsEnabled}"/>
+                        <TextBox Grid.Column="1" x:Name="MainNetworkMesInput" Style="{StaticResource PlanParameterInputStyle}" materialDesign:HintAssist.Hint="MES码"
+                                 Text="{Binding Draft.Items[MainNetwork].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[MainNetwork].IsEnabled}" Margin="0,0,12,0"/>
+                        <WrapPanel Grid.Column="2" IsEnabled="{Binding Draft.Items[MainNetwork].IsEnabled}">
+                            <TextBox Width="{Binding Draft.Items[MainNetwork].Values[UserName].InputWidth}" Style="{StaticResource PlanParameterInputStyle}" Text="{Binding Draft.Items[MainNetwork].Values[UserName].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainNetwork].Values[UserName].InputHint}" ToolTip="网络账号，与平台操作员和 Windows 用户名不同" Margin="{StaticResource PlanFieldSpacing}"/>
+                            <PasswordBox x:Name="NetworkPasswordInput" Width="{Binding Draft.Items[MainNetwork].Values[Password].InputWidth}" PasswordChanged="NetworkPasswordChanged" Loaded="NetworkPasswordLoaded" Unloaded="NetworkPasswordUnloaded" Style="{StaticResource PlanParameterPasswordStyle}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainNetwork].Values[Password].InputHint}" Margin="{StaticResource PlanFieldSpacing}"/>
+                            <TextBox Width="{Binding Draft.Items[MainNetwork].Values[Apn].InputWidth}" Style="{StaticResource PlanParameterInputStyle}" Text="{Binding Draft.Items[MainNetwork].Values[Apn].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainNetwork].Values[Apn].InputHint}" Margin="{StaticResource PlanFieldSpacing}"/>
+                        </WrapPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="MainPowerReportParameterTemplate">
+            <Grid Style="{StaticResource PlanComplexGroupStyle}" DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                <Border x:Name="ReportRow" Style="{StaticResource PlanParameterRowStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="{StaticResource PlanNameColumnWidth}"/><ColumnDefinition Width="{StaticResource PlanMesColumnWidth}"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                        <CheckBox Style="{StaticResource PlanFunctionCheckBoxStyle}" Content="{Binding Draft.Items[MainPowerReport].Name}" IsChecked="{Binding Draft.Items[MainPowerReport].IsEnabled}"/>
+                        <TextBox Grid.Column="1" x:Name="MainPowerReportMesInput" Style="{StaticResource PlanParameterInputStyle}" materialDesign:HintAssist.Hint="MES码"
+                                 Text="{Binding Draft.Items[MainPowerReport].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[MainPowerReport].IsEnabled}" Margin="0,0,12,0"/>
+                        <!-- 类型与当前分支字段共用一行，宽度不足时按字段自然换行。 -->
+                        <WrapPanel x:Name="ReportFields" Grid.Column="2" IsEnabled="{Binding Draft.Items[MainPowerReport].IsEnabled}">
+                            <WrapPanel.Resources>
+                                <Style x:Key="OrdinaryReportInputStyle" TargetType="TextBox" BasedOn="{StaticResource PlanParameterInputStyle}">
+                                    <Setter Property="Visibility" Value="{Binding Draft.UsesOrdinarySchedule, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                </Style>
+                                <Style x:Key="SpecifiedReportInputStyle" TargetType="TextBox" BasedOn="{StaticResource PlanParameterInputStyle}">
+                                    <Setter Property="Visibility" Value="{Binding Draft.UsesSpecifiedSchedule, Converter={StaticResource BooleanToVisibilityConverter}}"/>
+                                </Style>
+                            </WrapPanel.Resources>
+                            <ComboBox x:Name="ReportTypeInput" Width="{Binding Draft.Items[MainPowerReport].Values[Type].InputWidth}" HorizontalAlignment="Left" Style="{StaticResource PlanParameterComboStyle}" ItemsSource="{Binding Draft.Items[MainPowerReport].Values[Type].Options}" SelectedValue="{Binding Draft.Items[MainPowerReport].Values[Type].ByteValue}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainPowerReport].Values[Type].InputHint}" ToolTip="{Binding Draft.ReportHint}" Margin="{StaticResource PlanFieldSpacing}"/>
+                            <TextBox Width="{Binding Draft.Items[MainPowerReport].Values[Cycle].InputWidth}" Style="{StaticResource OrdinaryReportInputStyle}" Text="{Binding Draft.Items[MainPowerReport].Values[Cycle].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainPowerReport].Values[Cycle].InputHint}" Margin="{StaticResource PlanFieldSpacing}"/>
+                            <TextBox Width="{Binding Draft.Items[MainPowerReport].Values[Day].InputWidth}" Style="{StaticResource OrdinaryReportInputStyle}" Text="{Binding Draft.Items[MainPowerReport].Values[Day].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainPowerReport].Values[Day].InputHint}" Margin="{StaticResource PlanFieldSpacing}"/>
+                            <TextBox Width="{Binding Draft.Items[MainPowerReport].Values[Hour].InputWidth}" Style="{StaticResource OrdinaryReportInputStyle}" Text="{Binding Draft.Items[MainPowerReport].Values[Hour].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainPowerReport].Values[Hour].InputHint}" Margin="{StaticResource PlanFieldSpacing}"/>
+                            <TextBox Width="{Binding Draft.Items[MainPowerReport].Values[Minute].InputWidth}" Style="{StaticResource OrdinaryReportInputStyle}" Text="{Binding Draft.Items[MainPowerReport].Values[Minute].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainPowerReport].Values[Minute].InputHint}" Margin="{StaticResource PlanFieldSpacing}"/>
+                            <TextBox Width="{Binding Draft.Items[MainPowerReport].Values[Slot1].InputWidth}" Style="{StaticResource SpecifiedReportInputStyle}" Text="{Binding Draft.Items[MainPowerReport].Values[Slot1].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainPowerReport].Values[Slot1].InputHint}" Margin="{StaticResource PlanFieldSpacing}" MaxLength="4"/>
+                            <TextBox Width="{Binding Draft.Items[MainPowerReport].Values[Slot2].InputWidth}" Style="{StaticResource SpecifiedReportInputStyle}" Text="{Binding Draft.Items[MainPowerReport].Values[Slot2].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainPowerReport].Values[Slot2].InputHint}" Margin="{StaticResource PlanFieldSpacing}" MaxLength="4"/>
+                            <TextBox Width="{Binding Draft.Items[MainPowerReport].Values[Slot3].InputWidth}" Style="{StaticResource SpecifiedReportInputStyle}" Text="{Binding Draft.Items[MainPowerReport].Values[Slot3].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainPowerReport].Values[Slot3].InputHint}" Margin="{StaticResource PlanFieldSpacing}" MaxLength="4"/>
+                            <TextBox Width="{Binding Draft.Items[MainPowerReport].Values[Slot4].InputWidth}" Style="{StaticResource SpecifiedReportInputStyle}" Text="{Binding Draft.Items[MainPowerReport].Values[Slot4].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainPowerReport].Values[Slot4].InputHint}" Margin="{StaticResource PlanFieldSpacing}" MaxLength="4"/>
+                            <TextBox Width="{Binding Draft.Items[MainPowerReport].Values[Slot5].InputWidth}" Style="{StaticResource SpecifiedReportInputStyle}" Text="{Binding Draft.Items[MainPowerReport].Values[Slot5].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="{Binding Draft.Items[MainPowerReport].Values[Slot5].InputHint}" Margin="{StaticResource PlanFieldSpacing}" MaxLength="4"/>
+                        </WrapPanel>
+                    </Grid>
+                </Border>
+            </Grid>
+        </DataTemplate>
+        <!-- 页面只为三个复杂交互选用专用模板，模型保持统一目录及顺序。 -->
+        <DataTemplate x:Key="ParameterEditorTemplate">
+            <ContentControl Content="{Binding}">
+                <ContentControl.Style>
+                    <Style TargetType="ContentControl">
+                        <Setter Property="ContentTemplate" Value="{StaticResource CommonParameterItemTemplate}"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Code}" Value="{x:Static models:AlarmHostFunctionCatalog.MainServer}">
+                                <Setter Property="ContentTemplate" Value="{StaticResource MainServerParameterTemplate}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Code}" Value="{x:Static models:AlarmHostFunctionCatalog.MainNetwork}">
+                                <Setter Property="ContentTemplate" Value="{StaticResource MainNetworkParameterTemplate}"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Code}" Value="{x:Static models:AlarmHostFunctionCatalog.MainPowerReport}">
+                                <Setter Property="ContentTemplate" Value="{StaticResource MainPowerReportParameterTemplate}"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ContentControl.Style>
+            </ContentControl>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid Background="{StaticResource ImdpPageBackgroundBrush}">
@@ -49,8 +182,9 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition x:Name="ParameterRowDefinition" Height="4*" MinHeight="72" MaxHeight="480"/>
-                <RowDefinition Height="*" MinHeight="150"/>
+                <RowDefinition x:Name="ParameterRowDefinition" Height="4*" MinHeight="130"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition x:Name="ListRowDefinition" Height="*" MinHeight="180"/>
             </Grid.RowDefinitions>
 
             <!-- 文档图四区之一：面包屑独立，不混入操作按钮。 -->
@@ -70,26 +204,26 @@
                     <Grid x:Name="QueryLayout" SizeChanged="QueryLayoutSizeChanged">
                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <WrapPanel x:Name="QueryFields" SizeChanged="QueryFieldsSizeChanged" VerticalAlignment="Center" IsEnabled="{Binding CanEdit}">
-                            <Grid Margin="0,0,20,0">
+                        <WrapPanel x:Name="QueryFields" VerticalAlignment="Center" IsEnabled="{Binding CanEdit}">
+                            <Grid Width="380" MaxWidth="{Binding ActualWidth, ElementName=QueryFields}" Margin="0,0,20,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="产品编码:" VerticalAlignment="Center"/>
-                                <TextBox Grid.Column="1" x:Name="ProductCodeInput" Style="{StaticResource ParameterInput}" ToolTip="查询可留空或填写产品编码关键字；维护时必填" Text="{Binding Draft.ProductCode, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBox Grid.Column="1" x:Name="ProductCodeInput" Style="{StaticResource PlanParameterInputStyle}" ToolTip="查询可留空或填写产品编码关键字；维护时必填" Text="{Binding Draft.ProductCode, UpdateSourceTrigger=PropertyChanged}"/>
                             </Grid>
-                            <Grid Margin="0,0,20,0">
+                            <Grid Width="380" MaxWidth="{Binding ActualWidth, ElementName=QueryFields}" Margin="0,0,20,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                 <TextBlock Text="客户编码:" VerticalAlignment="Center"/>
-                                <TextBox Grid.Column="1" x:Name="CustomerCodeInput" Style="{StaticResource ParameterInput}" ToolTip="查询可留空或填写客户编码关键字；维护时必填" Text="{Binding Draft.CustomerCode, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBox Grid.Column="1" x:Name="CustomerCodeInput" Style="{StaticResource PlanParameterInputStyle}" ToolTip="查询可留空或填写客户编码关键字；维护时必填" Text="{Binding Draft.CustomerCode, UpdateSourceTrigger=PropertyChanged}"/>
                             </Grid>
                         </WrapPanel>
                         <StackPanel x:Name="QueryActions" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
-                            <Button x:Name="QueryButton" Command="{Binding QueryCommand}" Width="100" Height="44" Margin="0,0,10,0" Style="{StaticResource SemanticQueryButtonStyle}" ToolTip="{Binding PersistenceToolTip}" ToolTipService.ShowOnDisabled="True">
+                            <Button x:Name="QueryButton" Command="{Binding QueryCommand}" Width="100" Height="44" Margin="0,0,10,0" Style="{StaticResource SemanticQueryButtonStyle}">
                                 <StackPanel Orientation="Horizontal"><materialDesign:PackIcon Kind="Magnify" Width="20" Height="20" Margin="0,0,8,0"/><TextBlock Text="查询" VerticalAlignment="Center"/></StackPanel>
                             </Button>
-                            <Button x:Name="MaintainButton" Command="{Binding MaintainCommand}" Width="100" Height="44" Margin="0,0,10,0" Style="{StaticResource SemanticSuccessButtonStyle}" ToolTip="{Binding PersistenceToolTip}" ToolTipService.ShowOnDisabled="True">
+                            <Button x:Name="MaintainButton" Command="{Binding MaintainCommand}" Width="100" Height="44" Margin="0,0,10,0" Style="{StaticResource SemanticSuccessButtonStyle}">
                                 <StackPanel Orientation="Horizontal"><materialDesign:PackIcon Kind="WrenchOutline" Width="20" Height="20" Margin="0,0,8,0"/><TextBlock Text="维护" VerticalAlignment="Center"/></StackPanel>
                             </Button>
-                            <Button x:Name="DeleteButton" Command="{Binding DeleteCommand}" Width="100" Height="44" Style="{StaticResource SemanticDangerButtonStyle}" ToolTip="{Binding PersistenceToolTip}" ToolTipService.ShowOnDisabled="True">
+                            <Button x:Name="DeleteButton" Command="{Binding DeleteCommand}" Width="100" Height="44" Style="{StaticResource SemanticDangerButtonStyle}">
                                 <StackPanel Orientation="Horizontal"><materialDesign:PackIcon Kind="DeleteOutline" Width="20" Height="20" Margin="0,0,8,0"/><TextBlock Text="删除" VerticalAlignment="Center"/></StackPanel>
                             </Button>
                         </StackPanel>
@@ -102,16 +236,13 @@
                 </Grid>
             </Border>
 
-            <!-- 参数区：工位数量留在方案内，紧凑项目横排；折叠只收起参数正文。 -->
-            <Border x:Name="ParameterSection" Grid.Row="2" Style="{StaticResource ManagementSurfaceStyle}" Padding="20,8" Margin="0,0,0,10" IsEnabled="{Binding CanEdit}">
+            <!-- 参数区：固定基准组宽、窄窗组内换行；折叠始终独立于编辑状态。 -->
+            <Border x:Name="ParameterSection" Grid.Row="2" Style="{StaticResource ManagementSurfaceStyle}" Padding="20,8">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <Grid Margin="0,0,0,4">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="工位数量:" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                            <TextBox x:Name="StationCountInput" Width="70" Style="{StaticResource ParameterInput}" Text="{Binding Draft.StationCount, UpdateSourceTrigger=PropertyChanged}" ToolTip="默认 4；填写正整数，实际工位执行尚未接入"/>
-                        </StackPanel>
+                        <TextBlock Text="方案参数" VerticalAlignment="Center" FontWeight="SemiBold"/>
                         <Button x:Name="ToggleParametersButton" Grid.Column="2" Command="{Binding ToggleParametersCommand}" Width="32" Height="28" Padding="4" Background="Transparent" Foreground="{StaticResource ImdpMutedTextBrush}" Style="{StaticResource SemanticButtonBaseStyle}" ToolTip="{Binding ToggleParametersToolTip}">
                             <materialDesign:PackIcon Width="20" Height="20">
                                 <materialDesign:PackIcon.Style>
@@ -124,200 +255,28 @@
                         </Button>
                     </Grid>
                     <Grid x:Name="ParameterPanel" Grid.Row="1" Visibility="{Binding IsParametersExpanded, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <ScrollViewer x:Name="ParameterScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" ScrollChanged="ParameterScrollChanged">
-                    <StackPanel>
-                        <WrapPanel x:Name="SettingRows">
-                            <Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="表具编号:" IsChecked="{Binding Draft.Items[MeterNumber].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="MeterNumberMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[MeterNumber].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[MeterNumber].IsEnabled}" Margin="0,0,12,0"/>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="表具时间:" IsChecked="{Binding Draft.Items[MeterTime].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="MeterTimeMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[MeterTime].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[MeterTime].IsEnabled}" Margin="0,0,12,0"/>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="生产状态:" IsChecked="{Binding Draft.Items[ProductionStatus].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="ProductionStatusMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[ProductionStatus].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[ProductionStatus].IsEnabled}" Margin="0,0,12,0"/>
-                                <Grid Grid.Column="2" IsEnabled="{Binding Draft.Items[ProductionStatus].IsEnabled}"><ComboBox x:Name="ProductionStatusInput" Style="{StaticResource ParameterCombo}" ItemsSource="{Binding ProductionStatusOptions}" SelectedValue="{Binding Draft.Items[ProductionStatus].Values[VALUE].ByteValue}" materialDesign:HintAssist.Hint="目标状态"/></Grid>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="是否带阀:" IsChecked="{Binding Draft.Items[HasValve].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="HasValveMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[HasValve].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[HasValve].IsEnabled}" Margin="0,0,12,0"/>
-                                <Grid Grid.Column="2" IsEnabled="{Binding Draft.Items[HasValve].IsEnabled}"><CheckBox Content="有阀" IsChecked="{Binding Draft.Items[HasValve].Values[VALUE].BooleanValue}" VerticalAlignment="Center"/></Grid>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="寿命时间:" IsChecked="{Binding Draft.Items[Lifetime].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="LifetimeMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[Lifetime].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[Lifetime].IsEnabled}" Margin="0,0,12,0"/>
-                                <Grid Grid.Column="2" IsEnabled="{Binding Draft.Items[Lifetime].IsEnabled}"><TextBox x:Name="LifetimeInput" Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[Lifetime].Values[VALUE].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="秒"/></Grid>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="报警浓度阈值:" IsChecked="{Binding Draft.Items[AlarmThreshold].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="AlarmThresholdMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[AlarmThreshold].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[AlarmThreshold].IsEnabled}" Margin="0,0,12,0"/>
-                                <Grid Grid.Column="2" IsEnabled="{Binding Draft.Items[AlarmThreshold].IsEnabled}"><TextBox x:Name="AlarmThresholdInput" Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[AlarmThreshold].Values[VALUE].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="%LEL"/></Grid>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="报警恢复阈值:" IsChecked="{Binding Draft.Items[AlarmRecoveryThreshold].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="AlarmRecoveryThresholdMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[AlarmRecoveryThreshold].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[AlarmRecoveryThreshold].IsEnabled}" Margin="0,0,12,0"/>
-                                <Grid Grid.Column="2" IsEnabled="{Binding Draft.Items[AlarmRecoveryThreshold].IsEnabled}"><TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[AlarmRecoveryThreshold].Values[VALUE].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="%LEL"/></Grid>
-                            </Grid>
-                        </Border>
-                        </WrapPanel>
-                        <WrapPanel x:Name="ComplexRows">
-                        <Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="主服务器:" IsChecked="{Binding Draft.Items[MainServer].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="MainServerMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[MainServer].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[MainServer].IsEnabled}" Margin="0,0,12,0"/>
-                                <Grid Grid.Column="2" IsEnabled="{Binding Draft.Items[MainServer].IsEnabled}"><Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="90"/><ColumnDefinition Width="*"/><ColumnDefinition Width="100"/></Grid.ColumnDefinitions>
-                                    <ComboBox Style="{StaticResource ParameterCombo}" ItemsSource="{Binding AddressTypeOptions}" SelectedValue="{Binding Draft.Items[MainServer].Values[AddressType].ByteValue}" materialDesign:HintAssist.Hint="地址类型" Margin="0,0,12,0"/>
-                                    <TextBox Grid.Column="1" x:Name="ServerAddressInput" Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainServer].Values[Address].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="IP 或域名" Margin="0,0,12,0"/>
-                                    <TextBox Grid.Column="2" Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainServer].Values[Port].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="端口"/>
-                                </Grid></Grid>
-                            </Grid>
-                        </Border>
-                        <Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="主卡网络:" IsChecked="{Binding Draft.Items[MainNetwork].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="MainNetworkMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[MainNetwork].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[MainNetwork].IsEnabled}" Margin="0,0,12,0"/>
-                                <Grid Grid.Column="2" IsEnabled="{Binding Draft.Items[MainNetwork].IsEnabled}"><Grid>
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                    <TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainNetwork].Values[UserName].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="网络账号" ToolTip="网络账号，与平台操作员和 Windows 用户名不同" Margin="0,0,12,0"/>
-                                    <PasswordBox Grid.Column="1" x:Name="NetworkPasswordInput" PasswordChanged="NetworkPasswordChanged" Style="{StaticResource ParameterPassword}" materialDesign:HintAssist.Hint="网络密码" Margin="0,0,12,0"/>
-                                    <TextBox Grid.Column="2" Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainNetwork].Values[Apn].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="APN"/>
-                                </Grid></Grid>
-                            </Grid>
-                        </Border>
-                        </WrapPanel>
-                        <Border x:Name="ReportRow" Style="{StaticResource ParameterRow}" Width="{Binding ActualWidth, ElementName=ComplexRows}" MaxWidth="1100" HorizontalAlignment="Left" Margin="0,0,0,4">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="主电上报:" IsChecked="{Binding Draft.Items[MainPowerReport].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="MainPowerReportMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[MainPowerReport].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[MainPowerReport].IsEnabled}" Margin="0,0,12,0"/>
-                                <Grid Grid.Column="2" IsEnabled="{Binding Draft.Items[MainPowerReport].IsEnabled}"><StackPanel>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                        <ComboBox x:Name="ReportTypeInput" Style="{StaticResource ParameterCombo}" ItemsSource="{Binding ReportTypeOptions}" SelectedValue="{Binding Draft.Items[MainPowerReport].Values[Type].ByteValue}" materialDesign:HintAssist.Hint="上报类型" ToolTip="{Binding Draft.ReportHint}" Margin="0,0,12,0"/>
-                                        <UniformGrid x:Name="OrdinaryReportFields" Grid.Column="1" Rows="1" Visibility="{Binding Draft.UsesOrdinarySchedule, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainPowerReport].Values[Cycle].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="周期" Margin="0,0,8,0"/>
-<TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainPowerReport].Values[Day].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="日" Margin="0,0,8,0"/>
-<TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainPowerReport].Values[Hour].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="时" Margin="0,0,8,0"/>
-<TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainPowerReport].Values[Minute].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="分" Margin="0,0,8,0"/>
-                                        </UniformGrid>
-                                        <UniformGrid x:Name="SpecifiedReportFields" Grid.Column="1" Rows="1" Visibility="{Binding Draft.UsesSpecifiedSchedule, Converter={StaticResource BooleanToVisibilityConverter}}">
-                                            <TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainPowerReport].Values[Slot1].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="时段1" Margin="0,0,8,0" MaxLength="4"/>
-<TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainPowerReport].Values[Slot2].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="时段2" Margin="0,0,8,0" MaxLength="4"/>
-<TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainPowerReport].Values[Slot3].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="时段3" Margin="0,0,8,0" MaxLength="4"/>
-<TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainPowerReport].Values[Slot4].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="时段4" Margin="0,0,8,0" MaxLength="4"/>
-<TextBox Style="{StaticResource ParameterInput}" Text="{Binding Draft.Items[MainPowerReport].Values[Slot5].Value, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="时段5" Margin="0,0,8,0" MaxLength="4"/>
-                                        </UniformGrid>
-                                    </Grid>
-                                </StackPanel></Grid>
-                            </Grid>
-                        </Border>
+                <ScrollViewer x:Name="ParameterScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="ParameterEditors" IsEnabled="{Binding CanEdit}">
+                        <!-- 有参数项目按目录顺序共用换行区域，普通项与复杂项允许同排。 -->
+                        <ItemsControl x:Name="ParameterRows" ItemsSource="{Binding Draft.ParameterItems}" ItemTemplate="{StaticResource ParameterEditorTemplate}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                        <Border x:Name="NoParameterHeader" BorderBrush="{StaticResource ImdpBorderBrush}" BorderThickness="0,1,0,0" Margin="0,8,0,8"/>
+                        <ItemsControl x:Name="NoParameterRows" ItemsSource="{Binding Draft.NoParameterItems}" ItemTemplate="{StaticResource NoParameterItemTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
 
-                        <Border x:Name="InspectionHeader" BorderBrush="{StaticResource ImdpBorderBrush}" BorderThickness="0,1,0,0" Margin="0,8,0,8" Visibility="{Binding IsInspectionPlan, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-                        <WrapPanel x:Name="InspectionRows" Visibility="{Binding IsInspectionPlan, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="IMEI 号:" ToolTip="检验时读取" IsChecked="{Binding Draft.Items[Imei].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="ImeiMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[Imei].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[Imei].IsEnabled}" Margin="0,0,12,0"/>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="IMSI 号:" ToolTip="检验时读取" IsChecked="{Binding Draft.Items[Imsi].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="ImsiMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[Imsi].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[Imsi].IsEnabled}" Margin="0,0,12,0"/>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="ICCID 号:" ToolTip="检验时读取" IsChecked="{Binding Draft.Items[Iccid].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="IccidMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[Iccid].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[Iccid].IsEnabled}" Margin="0,0,12,0"/>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="CSQ 值:" ToolTip="检验时读取" IsChecked="{Binding Draft.Items[Csq].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="CsqMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[Csq].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[Csq].IsEnabled}" Margin="0,0,12,0"/>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="表具版本:" ToolTip="检验时读取" IsChecked="{Binding Draft.Items[Version].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="VersionMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[Version].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[Version].IsEnabled}" Margin="0,0,12,0"/>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="蓝牙/星闪MAC:" ToolTip="检验时读取" IsChecked="{Binding Draft.Items[BluetoothSnOrSparkMac].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="BluetoothSnOrSparkMacMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[BluetoothSnOrSparkMac].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[BluetoothSnOrSparkMac].IsEnabled}" Margin="0,0,12,0"/>
-                            </Grid>
-                        </Border>
-<Border Style="{StaticResource ParameterRow}">
-                            <Grid>
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="126"/><ColumnDefinition Width="80"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <CheckBox Content="蓝牙广播检测:" ToolTip="检验时检测" IsChecked="{Binding Draft.Items[BluetoothBroadcast].IsEnabled}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBox Grid.Column="1" x:Name="BluetoothBroadcastMesInput" Style="{StaticResource ParameterInput}" materialDesign:HintAssist.Hint="MES码"
-                                         Text="{Binding Draft.Items[BluetoothBroadcast].MesCode, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Draft.Items[BluetoothBroadcast].IsEnabled}" Margin="0,0,12,0"/>
-                            </Grid>
-                        </Border>
-                        </WrapPanel>
+                        <Border BorderBrush="{StaticResource ImdpBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,8"/>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="{StaticResource PlanNameColumnWidth}"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                            <TextBlock Text="工位数量:" VerticalAlignment="Center"/>
+                            <TextBox Grid.Column="1" x:Name="StationCountInput" Width="70" HorizontalAlignment="Left" Style="{StaticResource PlanParameterInputStyle}" Text="{Binding Draft.StationCount, UpdateSourceTrigger=PropertyChanged}" ToolTip="填写正整数，执行页面按此数量生成工位"/>
+                        </Grid>
 
                         <WrapPanel Margin="0,8,0,4">
                             <Button Content="重置草稿" Command="{Binding RequestResetCommand}" Style="{StaticResource DraftActionButton}"/>
-                            <TextBlock x:Name="InputCheckText" Text="{Binding InputCheckMessage}" TextWrapping="Wrap" MaxWidth="850" Margin="0,4,0,4">
-                                <TextBlock.Style><Style TargetType="TextBlock">
-                                    <Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource ImdpMutedTextBrush}"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding InputCheckMessage}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
-                                        <DataTrigger Binding="{Binding HasInputErrors}" Value="True"><Setter Property="Foreground" Value="{StaticResource ImdpDangerActionBrush}"/></DataTrigger>
-                                    </Style.Triggers>
-                                </Style></TextBlock.Style>
-                            </TextBlock>
                         </WrapPanel>
                         <Border Background="#FFF6E7" Padding="8" Visibility="{Binding ResetPending, Converter={StaticResource BooleanToVisibilityConverter}}">
                             <WrapPanel>
@@ -332,8 +291,26 @@
                 </Grid>
             </Border>
 
+            <!-- 原生分界线约束上下行最小高度，参数区收起时一并隐藏。 -->
+            <GridSplitter x:Name="ParameterListSplitter" Grid.Row="3" Height="6"
+                          HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                          ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" ShowsPreview="False"
+                          Cursor="SizeNS" ToolTip="上下拖动，调整参数区与方案列表高度"
+                          Visibility="{Binding IsParametersExpanded, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <GridSplitter.Style>
+                    <Style TargetType="GridSplitter">
+                        <Setter Property="Background" Value="{StaticResource ImdpBorderBrush}"/>
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource ImdpPrimaryActionBrush}"/>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </GridSplitter.Style>
+            </GridSplitter>
+
             <!-- 各检测项独立列，含工位、完整创建/更新信息。 -->
-            <Border x:Name="ListPanel" Grid.Row="3" Style="{StaticResource ManagementSurfaceStyle}" Padding="20,16">
+            <Border x:Name="ListPanel" Grid.Row="4" Style="{StaticResource ManagementSurfaceStyle}" Padding="20,16">
                 <Grid>
                     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid>
@@ -344,23 +321,23 @@
                                 <DataGrid.Columns>
                                     <DataGridTextColumn Header="产品编码" Binding="{Binding ProductCode}" Width="150" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
 <DataGridTextColumn Header="客户编码" Binding="{Binding CustomerCode}" Width="130" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn Header="表具编号" Binding="{Binding Items[MeterNumber]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn Header="表具时间" Binding="{Binding Items[MeterTime]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn Header="生产状态" Binding="{Binding Items[ProductionStatus]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn Header="是否带阀" Binding="{Binding Items[HasValve]}" Width="90" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn Header="寿命时间" Binding="{Binding Items[Lifetime]}" Width="130" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn Header="报警阈值" Binding="{Binding Items[AlarmThreshold]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn Header="恢复阈值" Binding="{Binding Items[AlarmRecoveryThreshold]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn Header="主服务器" Binding="{Binding Items[MainServer]}" Width="220" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn Header="主卡网络" Binding="{Binding Items[MainNetwork]}" Width="180" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn Header="主电上报" Binding="{Binding Items[MainPowerReport]}" Width="250" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn x:Name="ImeiColumn" Header="IMEI" Binding="{Binding Items[Imei]}" Width="90" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn x:Name="ImsiColumn" Header="IMSI" Binding="{Binding Items[Imsi]}" Width="90" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn x:Name="IccidColumn" Header="ICCID" Binding="{Binding Items[Iccid]}" Width="90" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn x:Name="CsqColumn" Header="CSQ" Binding="{Binding Items[Csq]}" Width="80" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn x:Name="VersionColumn" Header="表具版本" Binding="{Binding Items[Version]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn x:Name="BluetoothSnOrSparkMacColumn" Header="蓝牙/星闪MAC" Binding="{Binding Items[BluetoothSnOrSparkMac]}" Width="140" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
-<DataGridTextColumn x:Name="BluetoothBroadcastColumn" Header="蓝牙广播" Binding="{Binding Items[BluetoothBroadcast]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn Binding="{Binding Items[ProductionStatus]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn Binding="{Binding Items[HasValve]}" Width="90" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn Binding="{Binding Items[Lifetime]}" Width="130" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn Binding="{Binding Items[AlarmThreshold]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn Binding="{Binding Items[AlarmRecoveryThreshold]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn Binding="{Binding Items[MainServer]}" Width="220" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn Binding="{Binding Items[MainNetwork]}" Width="180" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn Binding="{Binding Items[MainPowerReport]}" Width="250" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn Binding="{Binding Items[MeterNumber]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn Binding="{Binding Items[MeterTime]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn x:Name="ImeiColumn" Binding="{Binding Items[Imei]}" Width="90" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn x:Name="ImsiColumn" Binding="{Binding Items[Imsi]}" Width="90" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn x:Name="IccidColumn" Binding="{Binding Items[Iccid]}" Width="90" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn x:Name="CsqColumn" Binding="{Binding Items[Csq]}" Width="80" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn x:Name="VersionColumn" Binding="{Binding Items[Version]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn x:Name="BluetoothSnOrSparkMacColumn" Binding="{Binding Items[BluetoothSnOrSparkMac]}" Width="140" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
+<DataGridTextColumn x:Name="BluetoothBroadcastColumn" Binding="{Binding Items[BluetoothBroadcast]}" Width="100" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
 <DataGridTextColumn Header="工位数量" Binding="{Binding StationCount}" Width="85" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
 <DataGridTextColumn Header="创建人" Binding="{Binding CreatedBy}" Width="95" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>
 <DataGridTextColumn Header="创建时间" Binding="{Binding CreatedTime, StringFormat=yyyy-MM-dd HH:mm}" Width="160" MinWidth="60" ElementStyle="{StaticResource SchemeCellText}"/>

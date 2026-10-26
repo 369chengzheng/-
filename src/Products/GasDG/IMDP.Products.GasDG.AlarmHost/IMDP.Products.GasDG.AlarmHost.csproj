@@ -19,5 +19,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\IMDP.Domain\IMDP.Domain.csproj" />
     <ProjectReference Include="..\..\..\IMDP.Application\IMDP.Application.csproj" />
+    <ProjectReference Include="..\..\..\IMDP.Infrastructure\IMDP.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
