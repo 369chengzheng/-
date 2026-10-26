@@ -22,6 +22,11 @@ public interface ICurrentContext
     /// </summary>
     string Role { get; }
 
+    /// <summary>
+    /// 当前登录工位（MES 资源编码 ResCode；登录时由登录页写入，MES 上传与工序卡控共用）
+    /// </summary>
+    string Station { get; }
+
     /// <summary>当前应用名称（用于审计填充，可空）</summary>
     string? AppName { get; }
 
@@ -30,12 +35,18 @@ public interface ICurrentContext
 
     /// <summary>设置当前登录用户</summary>
     /// <param name="workNumber">登录用户工号</param>
+    /// <param name="role">登录用户角色</param>
     void SetUser(string workNumber, string role);
+
+    /// <summary>
+    /// 设置当前登录工位（MES 资源编码 ResCode）
+    /// </summary>
+    /// <param name="station">登录工位名称（如 JY-01）</param>
+    void SetStation(string station);
 
     /// <summary>记录当前登录写入 LoginConfig 表的记录 Id（用于登出时回填登出时间）</summary>
     /// <param name="loginRecordId">刚写入的登录记录主键 Id</param>
     void SetCurrentLoginRecordId(long loginRecordId);
 
     /// <summary>清除当前登录用户（登出时调用）</summary>
-    void ClearUser();
-}
+    void ClearUser();}

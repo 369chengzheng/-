@@ -58,6 +58,74 @@ namespace IMDP.Products.GasDG.LaserDetector.Models
         /// <summary>程序编译时间是否为有效日期</summary>
         public bool IsCompilationTimeValid { get; set; }
 
+        #region MES 测试数据生成
+
+        /// <summary>
+        /// 根据当前配置生成可上传 MES 的自动检测项目列表
+        /// <para>遍历启用配置项，按 <see cref="LaserDetectorConfigItem.MesCode"/> 生成
+        /// {Code=MesCode, Data=实测值, Result=判定"1"/"0"}；实测值与红绿判定同
+        /// <see cref="CreateDisplayItem"/> 逻辑（界面展示与 MES 上传同一数据源）。
+        /// MesCode 为空的项跳过（产线未在配置界面填写编码，无法被 MES 测试项匹配）。</para>
+        /// </summary>
+        /// <param name="config">当前产品的激光检测配置</param>
+        /// <returns>MES 测试数据列表（仅含启用且 MesCode 非空的项）</returns>
+        public IReadOnlyList<Domain.Interfaces.MesProductItem> CreateMesItems(LaserDetectorConfig config)
+        {
+            var items = new List<Domain.Interfaces.MesProductItem>();
+            foreach (var item in config.Items)
+            {
+                if (!item.IsEnabled || string.IsNullOrWhiteSpace(item.MesCode))
+                {
+                    continue;
+                }
+
+                var displayItem = CreateDisplayItem(item);
+                if (displayItem == null)
+                {
+                    continue;
+                }
+
+                items.Add(new Domain.Interfaces.MesProductItem
+                {
+                    Code = item.MesCode,
+                    Data = displayItem.Value,
+                    Result = displayItem.IsPassed ? "1" : "0"
+                });
+            }
+
+            return items;
+        }
+
+        /// <summary>
+        /// 生成全部自动检测项均为 0 的 MES 占位数据（AC 轮询总超时场景）
+        /// <para>遍历启用配置项，Data 与 Result 全部置 "0"（MesCode 为空的项跳过），
+        /// 满足「查询超时无响应则所有测试值全为 0、测试结果为 0」的上传要求。</para>
+        /// </summary>
+        /// <param name="config">当前产品的激光检测配置</param>
+        /// <returns>全 0 MES 测试数据列表</returns>
+        public static IReadOnlyList<Domain.Interfaces.MesProductItem> CreateAllZeroMesItems(LaserDetectorConfig config)
+        {
+            var items = new List<Domain.Interfaces.MesProductItem>();
+            foreach (var item in config.Items)
+            {
+                if (!item.IsEnabled || string.IsNullOrWhiteSpace(item.MesCode))
+                {
+                    continue;
+                }
+
+                items.Add(new Domain.Interfaces.MesProductItem
+                {
+                    Code = item.MesCode,
+                    Data = "0",
+                    Result = "0"
+                });
+            }
+
+            return items;
+        }
+
+        #endregion
+
         #region 结果判断
 
         /// <summary>

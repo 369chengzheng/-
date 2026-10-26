@@ -83,6 +83,10 @@ public class MesService : IMesService
         {
             var body = new { moNumber };
             var json = JsonConvert.SerializeObject(body);
+#if DEBUG
+            // DEBUG 专用：将上传 MES 的数据序列化为缩进 JSON 打印到日志，便于人工验证（参考 IMDS jsonContent 日志）
+            _logger.Info($"[MES][GetProductInfoByMo][DEBUG] 上传JSON：\n{JsonConvert.SerializeObject(body, Formatting.Indented)}");
+#endif
             using var resp = await _httpClient.PostJsonAsync(_moUrl, json).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
             {
@@ -248,6 +252,223 @@ public class MesService : IMesService
 
     /// <inheritdoc/>
     /// <remarks>
+    /// IMDS 兼容载荷版（对应 IMDS MesService.SaveProcedure）：
+    /// ① GetProductInfo 工序卡控（RuResult != 1 直接失败，不重复上传）；
+    /// ② 解析 MES 下发的 TestClassinfo（Test_info.test_standard_array.test_item[]），
+    ///    按 ti_id 匹配本地测试数据并回填 ti_Class（未配置项记 Warn 日志跳过）；
+    /// ③ 任一匹配项 Result != "1" 时整体 IResult 置 0，Errcode 拼接 ",BL-项目码"（去 C-/Z- 前缀）；
+    /// ④ 按 IMDS 嵌套结构（TestResult.test_result.product_result_item.product_result[]）POST SaveProcedure。
+    /// </remarks>
+    public async Task<MesOperationResult> SaveProcedureAsync(string proBar, int result, string userCode, string resCode, IReadOnlyList<MesProductItem> testItems)
+    {
+        ArgumentNullException.ThrowIfNull(testItems);
+
+        // ① 工序卡控：不符合工序直接失败（对应 IMDS SaveProcedure 开头的 GetProductInfo 检查）
+        var productInfo = await GetProductInfoAsync(proBar, resCode).ConfigureAwait(false);
+        if (!productInfo.Success || string.IsNullOrEmpty(productInfo.TestClassinfo))
+        {
+            string gateError = productInfo.Success ? "MES 未下发测试类信息（TestClassinfo 为空）" : productInfo.ErrorInfo;
+            _logger.Warn($"SaveProcedure 工序卡控未通过：proBar={proBar}，resCode={resCode}，原因={gateError}");
+            return new MesOperationResult { Success = false, ErrorInfo = "工序卡控未通过：" + gateError };
+        }
+
+        // ② 解析 MES 测试项列表，匹配本地数据回填 ti_Class
+        List<MesTestItemDto>? mesTestItems = TryParseMesTestItems(productInfo.TestClassinfo);
+        if (mesTestItems == null || mesTestItems.Count == 0)
+        {
+            _logger.Warn($"SaveProcedure TestClassinfo 解析失败或测试项为空：proBar={proBar}，TestClassinfo={productInfo.TestClassinfo}");
+            return new MesOperationResult { Success = false, ErrorInfo = "MES 测试类信息解析失败" };
+        }
+
+        var upItems = new List<SaveProcedureProductResult>();
+        var unconfiguredCodes = new StringBuilder();
+        int overall = testItems.Count > 0 ? 1 : 0;
+        string ngCode = string.Empty;
+
+        foreach (var item in testItems)
+        {
+            var matched = mesTestItems.FirstOrDefault(m => m.Code == item.Code);
+            if (matched == null)
+            {
+                // 未在 MES 配置的检测项目：跳过上传（对应 IMDS unConfigCode 日志）
+                unconfiguredCodes.Append(item.Code).Append(' ');
+                continue;
+            }
+
+            upItems.Add(new SaveProcedureProductResult
+            {
+                Code = item.Code,
+                Value = item.Data,
+                Result = item.Result,
+                Class = matched.Class
+            });
+            if (item.Result != "1")
+            {
+                overall = 0;
+                ngCode += ",BL-" + item.Code.Replace("C-", string.Empty).Replace("Z-", string.Empty);
+            }
+        }
+
+        if (unconfiguredCodes.Length > 0)
+        {
+            _logger.Info($"SaveProcedure 未配置的检测项目：{unconfiguredCodes}");
+        }
+
+        if (result == 1 && overall == 0)
+        {
+            // 调用方判合格但存在单项未通过：以单项综合为准（对应 IMDS IsPass 由单项推导）
+            _logger.Warn($"SaveProcedure 调用方判定合格但存在单项未通过，按单项综合置为不合格：proBar={proBar}");
+        }
+
+        // ③ 组 IMDS 嵌套载荷并 POST
+        var payload = new SaveProcedurePayload
+        {
+            ProBar = proBar ?? string.Empty,
+            IResult = overall,
+            UserCode = userCode ?? string.Empty,
+            Rescode = resCode ?? string.Empty,
+            Errcode = ngCode,
+            TestResult = new SaveProcedureTestResult
+            {
+                TestResultInner = new SaveProcedureTestResultInner
+                {
+                    Channel = "1",
+                    Result = overall.ToString(),
+                    ProductResultItem = new SaveProcedureProductResultItem
+                    {
+                        Dim = upItems.Count.ToString(),
+                        ProductResultList = upItems
+                    }
+                }
+            }
+        };
+
+        string json;
+        try { json = JsonConvert.SerializeObject(payload); }
+        catch (Exception ex)
+        {
+            _logger.Warn(ex, $"SaveProcedure 载荷序列化失败：{ex.Message}");
+            return new MesOperationResult { Success = false, ErrorInfo = "载荷序列化失败：" + ex.Message };
+        }
+
+        _logger.Info($"SaveProcedure 上传载荷：proBar={proBar}，匹配项={upItems.Count}，整体判定={overall}，JSON={json}");
+
+        var (resp, err) = await PostMesAsync("SaveProcedure", payload).ConfigureAwait(false);
+        if (resp == null)
+            return new MesOperationResult { Success = false, ErrorInfo = err };
+
+        if (resp.RuResult != 1)
+        {
+            _logger.Warn($"SaveProcedure MES 拒收：proBar={proBar}，RuResult={resp.RuResult}，ErrorInfo={resp.ErrorInfo}");
+            return new MesOperationResult { Success = false, ErrorInfo = resp.ErrorInfo };
+        }
+
+        return new MesOperationResult { Success = true };
+    }
+
+    /// <summary>
+    /// 解析 MES 下发的测试类信息 JSON（对应 IMDS TestClassInfo 嵌套结构：
+    /// Test_info.test_standard_array.test_item[]，字段 ti_id/ti_Class）
+    /// </summary>
+    /// <param name="testClassinfo">GetProductInfo 返回的 TestClassinfo JSON 串</param>
+    /// <returns>MES 测试项列表；解析失败时返回 null</returns>
+    private static List<MesTestItemDto>? TryParseMesTestItems(string testClassinfo)
+    {
+        try
+        {
+            var dto = JsonConvert.DeserializeObject<MesTestClassInfoDto>(testClassinfo);
+            return dto?.TestInfo?.TestStandardArray?.TestItems;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    // ===== SaveProcedure（IMDS 兼容版）载荷 DTO（对应 IMDS Base.Models.SaveProcedure / Product） =====
+
+    /// <summary>MES 测试类信息响应嵌套（对应 IMDS TestClassInfo）</summary>
+    private class MesTestClassInfoDto
+    {
+        [JsonProperty("Test_info")] public MesTestInfoDto? TestInfo { get; set; }
+    }
+
+    /// <summary>测试信息（对应 IMDS TestInfo）</summary>
+    private class MesTestInfoDto
+    {
+        [JsonProperty("test_standard_array")] public MesTestStandardArrayDto? TestStandardArray { get; set; }
+    }
+
+    /// <summary>测试标准数组（对应 IMDS TestStandardArray）</summary>
+    private class MesTestStandardArrayDto
+    {
+        [JsonProperty("dim")] public string? Dim { get; set; }
+
+        [JsonProperty("test_item")] public List<MesTestItemDto>? TestItems { get; set; }
+    }
+
+    /// <summary>MES 测试项（对应 IMDS MesTestItem，取 ti_id 与 ti_Class）</summary>
+    private class MesTestItemDto
+    {
+        [JsonProperty("ti_id")] public string Code { get; set; } = string.Empty;
+
+        [JsonProperty("ti_Class")] public string Class { get; set; } = string.Empty;
+    }
+
+    /// <summary>SaveProcedure 上传载荷顶层（对应 IMDS SaveProcedure）</summary>
+    private class SaveProcedurePayload
+    {
+        [JsonProperty("ProBar")] public string ProBar { get; set; } = string.Empty;
+
+        [JsonProperty("IResult")] public int IResult { get; set; }
+
+        [JsonProperty("UserCode")] public string UserCode { get; set; } = string.Empty;
+
+        [JsonProperty("Rescode")] public string Rescode { get; set; } = string.Empty;
+
+        [JsonProperty("Errcode")] public string Errcode { get; set; } = string.Empty;
+
+        [JsonProperty("TestResult")] public SaveProcedureTestResult? TestResult { get; set; }
+    }
+
+    /// <summary>测试结果包装（序列化为 test_result）</summary>
+    private class SaveProcedureTestResult
+    {
+        [JsonProperty("test_result")] public SaveProcedureTestResultInner? TestResultInner { get; set; }
+    }
+
+    /// <summary>测试结果体（通道/整体结果/结果项）</summary>
+    private class SaveProcedureTestResultInner
+    {
+        [JsonProperty("channel")] public string Channel { get; set; } = "1";
+
+        [JsonProperty("result")] public string Result { get; set; } = string.Empty;
+
+        [JsonProperty("product_result_item")] public SaveProcedureProductResultItem? ProductResultItem { get; set; }
+    }
+
+    /// <summary>结果项集合（@dim = 项数）</summary>
+    private class SaveProcedureProductResultItem
+    {
+        [JsonProperty("@dim")] public string Dim { get; set; } = string.Empty;
+
+        [JsonProperty("product_result")] public List<SaveProcedureProductResult>? ProductResultList { get; set; }
+    }
+
+    /// <summary>单项结果（ti_id/pri_data/pri_result/ti_Class）</summary>
+    private class SaveProcedureProductResult
+    {
+        [JsonProperty("ti_id")] public string Code { get; set; } = string.Empty;
+
+        [JsonProperty("pri_data")] public string Value { get; set; } = string.Empty;
+
+        [JsonProperty("pri_result")] public string Result { get; set; } = string.Empty;
+
+        [JsonProperty("ti_Class")] public string Class { get; set; } = string.Empty;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
     /// 对应 AutoFrock MESMethod::GetProductTestData（EqOperation::GetTestResult）。URL method=GetTestResult（推断 🟡）。
     /// 请求 JSON：<c>{"MeterCode":..., "Num":n, "Ids":[...]}</c>（推断 🟡）。
     /// 响应 Data[] / Name[] 字段名推断 🟡；取 <c>Data[0..num-1]</c> 作为 TestData，对应 AutoFrock cs_Data 读取逻辑。
@@ -403,6 +624,11 @@ public class MesService : IMesService
             return (null, "MES " + method + " 请求序列化失败：" + ex.Message);
         }
 
+#if DEBUG
+        // DEBUG 专用：将上传 MES 的数据序列化为缩进 JSON 打印到日志，便于人工验证（参考 IMDS jsonContent 日志）
+        _logger.Info($"[MES][{method}][DEBUG] 上传JSON：\n{JsonConvert.SerializeObject(body, Formatting.Indented)}");
+#endif
+
         try
         {
             var url = GetMesUrl(method);
@@ -415,6 +641,10 @@ public class MesService : IMesService
             }
 
             var text = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+#if DEBUG
+            // DEBUG 专用：打印 MES 原始响应，便于人工比对（参考 IMDS resultContent 日志）
+            _logger.Info($"[MES][{method}][DEBUG] 响应JSON：\n{text}");
+#endif
             var dto = JsonConvert.DeserializeObject<MesBaseResp>(text);
             if (dto == null)
                 return (null, "MES " + method + " 返回空响应。");

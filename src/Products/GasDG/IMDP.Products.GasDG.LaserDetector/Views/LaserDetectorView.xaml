@@ -7,13 +7,16 @@
     分层卡片式布局（与 LaserDetectorConfigView 配置界面同风格）：
       Row0 面包屑导航：首页 > 物料编码(CurrentMaterialNumber，为空自动隐藏) > 当前页面名；
       Row1 操作条：左侧产品编码输入框（回车/空格/失焦加载方案），
-                   右侧串口选择与打开/关闭串口按钮 + 配置面板折叠/展开箭头；
+                   右侧串口打开/关闭按钮 + 配置面板折叠/展开箭头；
       Row2 配置预览面板：无 GroupBox 分区，统一 WrapPanel 陈列（只读、仅显示已启用项），
                    每项一个固定宽度(420)横向 StackPanel = 配置名 + MES代码框 + 可选参数区，
                    按输入控件数量由多到少排序：范围型(3输入) > 下拉型/值型(2输入)
                    > 状态型(1输入)，未启用项整项收起不占位；
                    工位数量、最大测试时间作为全局项（只读）固定排在配置项最后方；
       Row3 工位检测区：表格化布局（表头行 + 统一结果表格）。
+                   表头行仅显示工位号；串口选择下拉位于结果表格
+                   第 1 行「红外串口」各工位单元格内（单工位共用一个串口，
+                   全部绑定 ViewModel 同一 SelectedPort）。
     保留 Ctrl+鼠标滚轮整体缩放（0.5~3.0）与配置面板折叠/展开交互。
     =============================================================================
 -->
@@ -41,6 +44,7 @@
         <converters:AutoRowToVisibilityConverter x:Key="RowKindToAutoVisibilityConverter" />
         <converters:ManualRowToVisibilityConverter x:Key="RowKindToManualVisibilityConverter" />
         <converters:BarcodeRowToVisibilityConverter x:Key="RowKindToBarcodeVisibilityConverter" />
+        <converters:PortRowToVisibilityConverter x:Key="RowKindToPortVisibilityConverter" />
         <!--  测试方式下拉选项（有源/无源共用，与配置界面一致）  -->
         <x:Array x:Key="TestModeOptions" Type="models:ConfigModeOption">
             <models:ConfigModeOption Display="01-仅测试输出功能" Value="01" />
@@ -91,7 +95,7 @@
             </StackPanel>
         </Border>
 
-        <!--  Row1 操作条：独立白色横条（左：产品编码+工位数量；右：串口选择/开关 + 折叠箭头）  -->
+        <!--  Row1 操作条：独立白色横条（左：产品编码+工位数量；右：串口打开/关闭 + 折叠箭头）  -->
         <Border
             Grid.Row="1"
             Margin="0,0,0,10"
@@ -121,21 +125,14 @@
                     </TextBox>
                 </StackPanel>
 
-                <!--  右：串口选择与打开/关闭 + 配置面板折叠/展开箭头  -->
+                <!--  右：串口打开/关闭按钮 + 配置面板折叠/展开箭头
+                      （串口选择下拉已移至下方结果表格第 1 行「红外串口」
+                        各工位单元格内，单工位共用一个串口，
+                        全部绑定 ViewModel 同一 SelectedPort）  -->
                 <StackPanel
                     Grid.Column="1"
                     VerticalAlignment="Center"
                     Orientation="Horizontal">
-                    <TextBlock
-                        Margin="5,0"
-                        VerticalAlignment="Center"
-                        Text="串口选择:" />
-                    <ComboBox
-                        Width="120"
-                        Margin="5,0"
-                        behaviors:DropDownOpened.Command="{Binding RefreshPortsCommand}"
-                        ItemsSource="{Binding Ports}"
-                        SelectedItem="{Binding SelectedPort}" />
                     <Button
                         Width="90"
                         Height="40"
@@ -798,11 +795,11 @@
 
                 <!--
                     工位检测区（表格化，与检测平台截图一致）：
-                    表头行（工位号+串口名）→ 统一结果表格（行=序号+项目名，列=工位）：
-                    1 红外串口 → 2 检测状态 → 3 LED → 4 蜂鸣器 → 5 按键
+                    表头行（仅工位号）→ 统一结果表格（行=序号+项目名，列=工位）：
+                    1 红外串口（串口选择下拉，共用 SelectedPort）→ 2 检测状态 → 3 LED → 4 蜂鸣器 → 5 按键
                     （人工下拉，默认"正常"，不加底色）→ 6 表具条码（扫码+自动跳下一工位）
                     → 7..n 配置的检测项（自动结果红绿单元格）；
-                    行模板按 Kind 分派：Auto 文本 / Manual 下拉 / Barcode 扫码框
+                    行模板按 Kind 分派：Port 串口下拉 / Auto 文本 / Manual 下拉 / Barcode 扫码框
                 -->
                 <Border
                     Grid.Row="1"
@@ -811,7 +808,7 @@
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                         <StackPanel>
 
-                            <!--  表头行：序号 | 检测项目 | 工位01..n（工位名 + 已打开串口名）  -->
+                            <!--  表头行：序号 | 检测项目 | 工位01..n（仅工位号；串口选择在第 1 行单元格内）  -->
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="45" />
@@ -863,11 +860,6 @@
                                                         FontWeight="Bold"
                                                         Foreground="White"
                                                         Text="{Binding Station, StringFormat='工位{0:D2}'}"
-                                                        TextAlignment="Center" />
-                                                    <TextBlock
-                                                        FontSize="11"
-                                                        Foreground="#E8EAF6"
-                                                        Text="{Binding DataContext.OpenedPortName, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         TextAlignment="Center" />
                                                 </StackPanel>
                                             </Border>
@@ -977,6 +969,16 @@
                                                                             CommandParameter="{Binding Station}" />
                                                                     </TextBox.InputBindings>
                                                                 </TextBox>
+                                                                <!--  串口行：串口选择下拉（单工位共用一个串口，全部绑定 VM 同一
+                                                                      SelectedPort/Ports；下拉展开时刷新可用串口列表）  -->
+                                                                <ComboBox
+                                                                    MinWidth="90"
+                                                                    VerticalAlignment="Center"
+                                                                    HorizontalContentAlignment="Center"
+                                                                    behaviors:DropDownOpened.Command="{Binding DataContext.RefreshPortsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    ItemsSource="{Binding DataContext.Ports, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    SelectedItem="{Binding DataContext.SelectedPort, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                    Visibility="{Binding DataContext.Kind, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource RowKindToPortVisibilityConverter}}" />
                                                                 <!--  人工行：正常/异常下拉（默认正常，选异常红底）  -->
                                                                 <ComboBox
                                                                     MinWidth="90"

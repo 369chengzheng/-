@@ -184,7 +184,8 @@ public static class DropDownOpened
 /// <para>用法：在工位条码框上设置 behaviors:FocusNext.TargetKey="{Binding Station}"；
 /// 扫码枪以回车结尾，键起后在同一 ItemsControl 内收集全部已设置 TargetKey 的
 /// TextBox（键 = 工位号），聚焦键大于当前值的最小项并全选文本，
-/// 实现 1→2→…→n 工位自动跳转；当前已是最后一个工位时不跳转。</para>
+/// 实现 1→2→…→n 工位自动跳转；当前已是最后一个工位时回绕到第一个工位，
+/// 形成 1→2→…→n→1 闭环，便于连续循环扫码作业。</para>
 /// </summary>
 public static class FocusNext
 {
@@ -265,13 +266,13 @@ public static class FocusNext
     }
 
     /// <summary>
-    /// 在同容器列表中查找当前目标键之后的最小目标键对应的 TextBox
+    /// 在同容器列表中查找下一个目标键对应的 TextBox（末工位回绕到首工位）
     /// <para>向上定位到承载全部工位条码框的 ItemsControl，收集其中全部
-    /// 已设置 TargetKey 的 TextBox（键 = 工位号），取键大于当前值的最小项；
-    /// 当前已是最后一个工位时返回 null（不跳转）。</para>
+    /// 已设置 TargetKey 的 TextBox（键 = 工位号），优先取键大于当前值的最小项；
+    /// 当前已是最后一个工位时回绕取最小键项，形成 1→2→…→n→1 闭环跳转。</para>
     /// </summary>
     /// <param name="current">当前触发回车的输入框</param>
-    /// <returns>下一个工位的输入框；无下一项时返回 null</returns>
+    /// <returns>下一个工位的输入框；容器内无其他目标时返回 null</returns>
     private static TextBox? FindNextTextBox(TextBox current)
     {
         // 向上找到 ItemsControl（工位列表容器），其内部包含全部工位的条码框
@@ -282,10 +283,15 @@ public static class FocusNext
         }
 
         int currentKey = GetTargetKey(current);
-        return FindDescendants<TextBox>(presenter)
-            .Where(textBox => (int)textBox.GetValue(TargetKeyProperty) > currentKey)
+        var candidates = FindDescendants<TextBox>(presenter)
+            .Where(textBox => (int)textBox.GetValue(TargetKeyProperty) > 0)
             .OrderBy(textBox => (int)textBox.GetValue(TargetKeyProperty))
-            .FirstOrDefault();
+            .ToList();
+
+        // 优先取键大于当前值的最小项（1→2→…→n 正向跳转）；
+        // 已是最大键（末工位）时回绕到最小键（n→1），形成闭环
+        return candidates.FirstOrDefault(textBox => (int)textBox.GetValue(TargetKeyProperty) > currentKey)
+               ?? candidates.FirstOrDefault();
     }
 
     /// <summary>

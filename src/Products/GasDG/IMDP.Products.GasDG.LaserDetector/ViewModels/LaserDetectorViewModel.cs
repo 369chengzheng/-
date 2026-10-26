@@ -1,4 +1,4 @@
-﻿// =============================================================================
+// =============================================================================
 // 文件名：LaserDetectorViewModel.cs
 // 功能描述：激光检测仪校验界面视图模型（严格 MVVM，参考 IMDS 项目同名界面移植）。
 //           按方案的工位数量动态生成工位卡片；扫码触发自动测试 → 轮询结果
@@ -19,8 +19,7 @@ using IMDP.Application.DTOs;
 using IMDP.Application.Services;
 using IMDP.Application.Events;
 using IMDP.Domain.Interfaces;
-using IMDP.Domain.Products;
-using IMDP.Infrastructure.Logging;
+using IMDP.Domain.Products;using IMDP.Infrastructure.Logging;
 using IMDP.Products.GasDG.LaserDetector.Models;
 using IMDP.Products.GasDG.LaserDetector.Services;
 using NLog;
@@ -44,12 +43,21 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
     private readonly ICurrentContext _currentContext;
     private readonly IEventAggregator _eventAggregator;
     private readonly IMessageService _messageService;
+    private readonly IMesService _mesService;
 
     /// <summary>串口名称缓存（打开串口后记录，关闭与发送时使用）</summary>
     private string _portName = string.Empty;
 
     /// <summary>各工位测试计时器（键 = 工位号；字典随工位数动态扩容，无固定上限）</summary>
     private readonly Dictionary<int, Stopwatch> _stopwatches = new();
+
+    /// <summary>
+    /// 各工位本轮自动项 MES 数据缓存（键 = 工位号）
+    /// <para>自动检测完成后缓存，人工项判定完成上报 MES 时与人工项拼接为完整载荷
+    /// （对应 IMDS SaveInspection 中 automaticResult.CreateMesTestItems 的拼装时机）；
+    /// 扫码开始新一轮检测时覆盖写入。</para>
+    /// </summary>
+    private readonly Dictionary<int, IReadOnlyList<MesProductItem>> _stationAutoMesItems = new();
 
     /// <summary>导航时由主界面传入的软件物料号（面包屑显示）</summary>
     [ObservableProperty]
@@ -130,16 +138,18 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
     /// <param name="testPlanService">测试计划服务（按产品编码加载方案）</param>
     /// <param name="testRecordService">检测记录服务（保存检测结果）</param>
     /// <param name="detectService">激光检测服务（串口交互与协议解析）</param>
-    /// <param name="currentContext">当前用户上下文（记录操作员）</param>
+    /// <param name="currentContext">当前用户上下文（记录操作员与登录工位 ResCode）</param>
     /// <param name="eventAggregator">事件聚合器（返回首页）</param>
     /// <param name="messageService">统一消息提示服务（Growl 轻提示/对话框）</param>
+    /// <param name="mesService">MES 服务（检测结果上传 SaveProcedure）</param>
     public LaserDetectorViewModel(
         ITestPlanService testPlanService,
         ITestRecordService testRecordService,
         LaserDetectorDetectService detectService,
         ICurrentContext currentContext,
         IEventAggregator eventAggregator,
-        IMessageService messageService)
+        IMessageService messageService,
+        IMesService mesService)
     {
         _testPlanService = testPlanService;
         _testRecordService = testRecordService;
@@ -147,9 +157,10 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
         _currentContext = currentContext;
         _eventAggregator = eventAggregator;
         _messageService = messageService;
+        _mesService = mesService;
 
         RebuildStations(StationCount);
-        RefreshPorts();
+        _ = RefreshPortsAsync(); // 构造期火忘执行：后台枚举，不阻塞页面加载
     }
 
     /// <summary>
@@ -238,13 +249,26 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
     }
 
     /// <summary>
-    /// 刷新可用串口列表（自动选中第一个；由 [RelayCommand] 生成 RefreshPortsCommand）
+    /// 刷新可用串口列表（后台线程枚举，避免 UI 卡顿；自动选中第一个）
+    /// <para>由 [RelayCommand] 生成 RefreshPortsCommand。串口枚举
+    /// （SerialPort.GetPortNames）在含虚拟串口驱动的机器上可能同步阻塞数百毫秒，
+    /// 故放入 Task.Run 后台执行；刷新后仅当列表内容变化时才替换集合实例，
+    /// 已选串口仍在列表中时保持不变，避免下拉闪变与选择被重置。</para>
     /// </summary>
     [RelayCommand]
-    private void RefreshPorts()
+    private async Task RefreshPortsAsync()
     {
-        Ports = new ObservableCollection<string>(_detectService.GetAvailablePorts());
-        if (Ports.Count > 0 && string.IsNullOrEmpty(SelectedPort))
+        // 后台线程枚举串口：UI 线程零阻塞（修复首次打开下拉/进入页面时的明显卡顿）
+        var ports = await Task.Run(() => _detectService.GetAvailablePorts());
+
+        // 内容未变化时保留原集合实例：ComboBox 不重建，避免下拉闪变
+        if (Ports != null && Ports.SequenceEqual(ports))
+        {
+            return;
+        }
+
+        Ports = new ObservableCollection<string>(ports);
+        if (Ports.Count > 0 && (string.IsNullOrEmpty(SelectedPort) || !Ports.Contains(SelectedPort)))
         {
             SelectedPort = Ports[0];
         }
@@ -412,8 +436,9 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
     {
         var rows = new ObservableCollection<LaserDetectorResultRow>
         {
-            // 1 红外串口：单元格显示已打开的串口号（不加底色）
-            new(1, "红外串口", stationCount, LaserDetectorResultRowKind.Auto),
+            // 1 红外串口：单元格内嵌串口选择下拉（Kind=Port，单工位共用一个串口，
+            // 全部绑定 VM 同一 SelectedPort，不加底色）
+            new(1, "红外串口", stationCount, LaserDetectorResultRowKind.Port),
             // 2 检测状态：耗时-当前状态（0:00-待检测 / 0:0x-检测中 / x:xx-合格/不合格）
             new(2, "检测状态", stationCount, LaserDetectorResultRowKind.Auto),
             // 3-5 人工测试项：默认全部"正常"（不加底色）
@@ -557,29 +582,20 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
     /// <summary>
     /// 刷新固定行（行 1 红外串口 / 行 2 检测状态）的全部工位单元格
     /// <para>串口打开/关闭、工位 Phase 与耗时变化时调用，保持表格固定行
-    /// 与 VM 状态同步。</para>
+    /// 与 VM 状态同步；行 1 红外串口已改为串口选择下拉（Kind=Port），
+    /// 单元格内容（SelectedPort/OpenedPortName）由界面直接绑定 VM，
+    /// 不再经此处写入 Value 文本，仅刷新行 2 检测状态。</para>
     /// </summary>
     private void RefreshFixedRows()
     {
-        var portRow = ResultRows.FirstOrDefault(r => r.Name == "红外串口");
         var statusRow = ResultRows.FirstOrDefault(r => r.Name == "检测状态");
-        if (portRow == null || statusRow == null)
+        if (statusRow == null)
         {
             return;
         }
 
         foreach (var state in Stations)
         {
-            int cellIndex = state.Station - 1;
-            var portCell = portRow.Cells.ElementAtOrDefault(cellIndex);
-            if (portCell != null)
-            {
-                // 红外串口行不加底色：仅显示串口号文本
-                portCell.Value = OpenedPortName;
-                portCell.HasResult = false;
-                portCell.ColorMode = ColorNone;
-            }
-
             RefreshStatusCell(state);
         }
     }
@@ -604,7 +620,8 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
         string color = state.Phase switch
         {
             LaserDetectorStationPhase.Passed => ColorGreen,
-            LaserDetectorStationPhase.Failed or LaserDetectorStationPhase.CommFailed => ColorRed,
+            LaserDetectorStationPhase.Failed or LaserDetectorStationPhase.CommFailed
+                or LaserDetectorStationPhase.MesFailed or LaserDetectorStationPhase.Timeout => ColorRed,
             LaserDetectorStationPhase.AutoTesting or LaserDetectorStationPhase.AwaitingManual
                 or LaserDetectorStationPhase.ManualTesting => ColorOrange,
             _ => ColorNone
@@ -644,6 +661,8 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
             LaserDetectorStationPhase.Passed => $"{duration}-合格",
             LaserDetectorStationPhase.Failed => $"{duration}-不合格",
             LaserDetectorStationPhase.CommFailed => $"{duration}-通信失败",
+            LaserDetectorStationPhase.MesFailed => $"{duration}-MES上传失败",
+            LaserDetectorStationPhase.Timeout => $"{duration}-超时",
             _ => $"{duration}-待检测"
         };
     }
@@ -783,9 +802,23 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
             return;
         }
 
+        // 表号防重校验：本次会话内任一工位已录入相同表号即视为重复，
+        // 模态弹窗提示用户重新扫码，且不启动检测（重复表号不允许进入检测流程）
+        var duplicatedStation = Stations.FirstOrDefault(s =>
+            s.Station != station &&
+            !string.IsNullOrWhiteSpace(s.EquipmentCode) &&
+            string.Equals(s.EquipmentCode, state.EquipmentCode, StringComparison.OrdinalIgnoreCase));
+        if (duplicatedStation != null)
+        {
+            _messageService.ShowDuplicateEquipmentCodeWarning(
+                $"表号 {state.EquipmentCode} 已在工位 {duplicatedStation.Station} 录入，请勿重复输入，请重新扫码！");
+            return;
+        }
+
         // 重置该工位为新一轮检测初始状态并启动计时
         state.IsAutoTesting = true;
         state.IsAutoPassed = false;
+        state.IsResultReported = false;
         state.Phase = LaserDetectorStationPhase.AutoTesting;
         state.TestDuration = "00:00";
         state.TestDurationTime = TimeSpan.Zero;
@@ -798,21 +831,34 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
 
         try
         {
-            var result = await _detectService.DetectAsync(
+            var outcome = await _detectService.DetectAsync(
                 station,
                 Config,
                 MaxTestTimeout,
                 // 串口指令发送日志：字节以空格分隔的十六进制输出（替代默认的“-”分隔）
                 command => _logger.Info(
                     $"[{_portName}] 工位{station} 发送指令({command.Length}字节)：{BitConverter.ToString(command).Replace('-', ' ')}"));
-            if (result == null)
+
+            // 规则 3.1：开始指令（0xAA）无应答 → 不上传 MES，仅本地记录不合格（通信失败）
+            if (outcome.Kind == LaserDetectorDetectService.LaserDetectorDetectOutcomeKind.StartFailed)
             {
-                // 通信失败：工位置红并直接保存不合格记录（结果列保持空白占位）
                 state.Phase = LaserDetectorStationPhase.CommFailed;
-                await SaveRecordAsync(state, isPass: false, result: null);
+                await SaveRecordAsync(state, isPass: false, result: null, mesUploaded: false, mesError: "开始指令无应答，未上传MES");
                 return;
             }
 
+            // 规则 3.2：查询指令（0xAC）总超时 → 所有测试值全 0、结果 0 上传 MES；
+            // 界面报错优先级：超时 > 检测项不通过 > MES 上传失败（超时为最高优先级，
+            // 后续 MES 上传成败均不覆盖此状态，便于操作员一眼识别超时故障）
+            if (outcome.Kind == LaserDetectorDetectService.LaserDetectorDetectOutcomeKind.QueryTimeout)
+            {
+                state.Phase = LaserDetectorStationPhase.Timeout;
+                var zeroItems = LaserDetectorTestResult.CreateAllZeroMesItems(Config);
+                await UploadMesAndSaveRecordAsync(state, isPass: false, result: null, mesItems: zeroItems);
+                return;
+            }
+
+            var result = outcome.Result!;
             // 检测结果写入表格该工位对应列（红绿判定），同时保留原只读结果列表供记录保存使用
             FillStationResult(station, result);
             state.PropertyItems = new ObservableCollection<LaserDetectorResultDisplayItem>(
@@ -820,13 +866,17 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
 
             if (!result.IsAutomaticTestPassed(Config))
             {
-                // 自动检测项未全部通过：置红保存不合格记录
+                // 自动检测项未全部通过：置红，实测值 + 判定上传 MES（规则 3.3 同样适用）
                 state.Phase = LaserDetectorStationPhase.Failed;
-                await SaveRecordAsync(state, isPass: false, result);
+                var failedItems = result.CreateMesItems(Config);
+                _stationAutoMesItems[station] = failedItems;
+                await UploadMesAndSaveRecordAsync(state, isPass: false, result, failedItems);
                 return;
             }
 
-            // 自动项全部通过：进入人工测试阶段，由操作员判定 LED/蜂鸣器/按键
+            // 自动项全部通过：缓存自动项 MES 数据（人工判定完成后拼接上报），
+            // 进入人工测试阶段，由操作员判定 LED/蜂鸣器/按键
+            _stationAutoMesItems[station] = result.CreateMesItems(Config);
             state.IsAutoPassed = true;
             state.Phase = LaserDetectorStationPhase.AwaitingManual;
         }
@@ -843,10 +893,13 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
 
     /// <summary>
     /// 评估工位综合结果：自动项通过且人工项全部正常→合格；存在异常→不合格；否则保持人工测试中
+    /// <para>合格/不合格终态均先经 <see cref="UploadMesAndSaveRecordAsync"/> 上传 MES：
+    /// 上传成功按测试结果定终态（Passed/Failed）；上传失败按规则 3.3 置 MesFailed
+    /// 并按不合格保存本地记录。</para>
     /// </summary>
-    private void EvaluateStationResult(LaserDetectorStationState state)
+    private async void EvaluateStationResult(LaserDetectorStationState state)
     {
-        if (!state.IsAutoPassed || string.IsNullOrWhiteSpace(state.EquipmentCode))
+        if (!state.IsAutoPassed || string.IsNullOrWhiteSpace(state.EquipmentCode) || state.IsResultReported)
         {
             return;
         }
@@ -857,17 +910,134 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
         if (hasFail)
         {
             state.Phase = LaserDetectorStationPhase.Failed;
-            _ = SaveRecordAsync(state, isPass: false, result: null);
+            _ = UploadMesAndSaveRecordAsync(state, isPass: false, result: null,
+                mesItems: CombineAutoAndManualMesItems(state));
         }
         else if (allPass)
         {
-            state.Phase = LaserDetectorStationPhase.Passed;
-            _ = SaveRecordAsync(state, isPass: true, result: null);
+            // 先置人工测试中占位：MES 上传成功后再迁移 Passed（失败则 MesFailed）
+            state.Phase = LaserDetectorStationPhase.ManualTesting;
+            await UploadMesAndSaveRecordAsync(state, isPass: true, result: null,
+                mesItems: CombineAutoAndManualMesItems(state));
         }
         else
         {
             state.Phase = LaserDetectorStationPhase.ManualTesting;
         }
+    }
+
+    /// <summary>
+    /// 拼接本轮自动项 MES 数据与人工项 MES 数据（人工判定完成上报时使用）
+    /// </summary>
+    /// <param name="state">工位运行时状态</param>
+    /// <returns>自动项 + 人工项的完整 MES 数据列表</returns>
+    private List<MesProductItem> CombineAutoAndManualMesItems(LaserDetectorStationState state)
+    {
+        var items = new List<MesProductItem>();
+        if (_stationAutoMesItems.TryGetValue(state.Station, out var autoItems))
+        {
+            items.AddRange(autoItems);
+        }
+
+        items.AddRange(BuildManualMesItems(state));
+        return items;
+    }
+
+    /// <summary>
+    /// 构建人工测试项的 MES 数据（自动项完成后由 EvaluateStationResult 拼入；
+    /// 自动项 MES 项已在扫码流程生成并保存于 <see cref="_stationAutoMesItems"/>）
+    /// </summary>
+    /// <param name="state">工位运行时状态</param>
+    /// <returns>人工项 MES 数据列表（LED/蜂鸣器/按键，IMDS 固定编码顺序）</returns>
+    private static List<MesProductItem> BuildManualMesItems(LaserDetectorStationState state)
+    {
+        return new List<MesProductItem>
+        {
+            new() { Code = "C-AJJC", Data = state.ButtonResult, Result = state.ButtonResult == "正常" ? "1" : "0" },
+            new() { Code = "C-FMQJC", Data = state.BuzzerResult, Result = state.BuzzerResult == "正常" ? "1" : "0" },
+            new() { Code = "C-LED", Data = state.LedResult, Result = state.LedResult == "正常" ? "1" : "0" }
+        };
+    }
+
+    /// <summary>
+    /// 上传 MES 并保存本地检测记录（统一上报入口，每轮仅执行一次）
+    /// <para>流程：防重检查（IsResultReported）→ 组完整载荷（Z-BHSZ 条码 + 自动项 + 人工项）
+    /// → <see cref="IMesService.SaveProcedureAsync"/> 上传 → 无论 MES 成败均保存本地记录
+    /// （TestContentJson 补记 MES 上传结果项）。规则 3.3：MES 上传失败（被拒/异常）时
+    /// 本次测试判失败——工位置 MesFailed（红，"MES上传失败"），本地记录按不合格保存，
+    /// 并 Growl 提示操作员。</para>
+    /// </summary>
+    /// <param name="state">工位运行时状态</param>
+    /// <param name="isPass">本地综合判定（true=合格；MES 失败时记录按不合格保存）</param>
+    /// <param name="result">自动检测结果（AC 超时/人工阶段为 null）</param>
+    /// <param name="mesItems">自动项 MES 数据（人工阶段仅传人工项，自动项由扫码轮缓存拼接）</param>
+    private async Task UploadMesAndSaveRecordAsync(
+        LaserDetectorStationState state,
+        bool isPass,
+        LaserDetectorTestResult? result,
+        IReadOnlyList<MesProductItem> mesItems)
+    {
+        if (state.IsResultReported)
+        {
+            return;
+        }
+
+        state.IsResultReported = true;
+
+        string barcode = state.EquipmentCode;
+        string userCode = _currentContext.UserName;
+        string resCode = _currentContext.Station;
+
+        // 完整载荷 = Z-BHSZ(条码) + 自动项 + 人工项（IMDS SaveInspection 拼装顺序）
+        var fullItems = new List<MesProductItem>
+        {
+            new() { Code = "Z-BHSZ", Data = barcode, Result = "1" }
+        };
+        fullItems.AddRange(mesItems);
+
+        MesOperationResult? mesResult = null;
+        try
+        {
+            mesResult = await _mesService.SaveProcedureAsync(barcode, isPass ? 1 : 0, userCode, resCode, fullItems);
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, $"工位{state.Station} MES 上传异常：表具={barcode}，原因={ex.Message}");
+            mesResult = new MesOperationResult { Success = false, ErrorInfo = ex.Message };
+        }
+
+        if (mesResult.Success)
+        {
+            _logger.Info($"工位{state.Station} MES 上传成功：表具={barcode}，判定={(isPass ? "合格" : "不合格")}，项目数={fullItems.Count}");
+            // MES 上传成功：按测试结果迁移终态（人工合格轮从 ManualTesting 迁移 Passed）；
+            // 界面报错优先级：超时 > 检测项不通过 > MES 上传失败——仅当工位无更高
+            // 优先级错误（超时/不合格/通信失败）时才迁移终态，避免覆盖已有报错显示
+            if (state.Phase != LaserDetectorStationPhase.Failed &&
+                state.Phase != LaserDetectorStationPhase.CommFailed &&
+                state.Phase != LaserDetectorStationPhase.Timeout)
+            {
+                state.Phase = isPass ? LaserDetectorStationPhase.Passed : LaserDetectorStationPhase.Failed;
+            }
+        }
+        else
+        {
+            // 规则 3.3：MES 上传失败 → 本次测试判失败；
+            // 界面报错优先级：超时 > 检测项不通过 > MES 上传失败——MES 错误优先级最低，
+            // 仅当工位无超时/检测项不通过/通信失败时才置 MesFailed 展示
+            _logger.Error($"工位{state.Station} MES 上传失败：表具={barcode}，原因={mesResult.ErrorInfo}");
+            isPass = false;
+            if (state.Phase != LaserDetectorStationPhase.Timeout &&
+                state.Phase != LaserDetectorStationPhase.Failed &&
+                state.Phase != LaserDetectorStationPhase.CommFailed)
+            {
+                state.Phase = LaserDetectorStationPhase.MesFailed;
+            }
+
+            _messageService.GrowlWarning($"工位{state.Station} MES上传失败：{mesResult.ErrorInfo}");
+        }
+
+        // 本地记录无论 MES 成败均保存（MES 结果随记录落库便于追溯）
+        await SaveRecordAsync(state, isPass, result, mesResult.Success, mesResult.ErrorInfo);
     }
 
     /// <summary>
@@ -878,7 +1048,14 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
     /// <param name="state">工位运行时状态</param>
     /// <param name="isPass">综合判定结果（true=合格）</param>
     /// <param name="result">自动检测结果（通信失败时为 null）</param>
-    private async Task SaveRecordAsync(LaserDetectorStationState state, bool isPass, LaserDetectorTestResult? result)
+    /// <param name="mesUploaded">MES 是否上传成功（3.1 未上传场景为 false）</param>
+    /// <param name="mesError">MES 失败原因（成功时为 null）</param>
+    private async Task SaveRecordAsync(
+        LaserDetectorStationState state,
+        bool isPass,
+        LaserDetectorTestResult? result,
+        bool mesUploaded = true,
+        string? mesError = null)
     {
         try
         {
@@ -889,8 +1066,14 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
                 new { Name = "功耗配置", Value = PowerConfigDisplay, Result = "1" },
                 new { Name = "LED指示灯", Value = state.LedResult, Result = state.LedResult == "正常" ? "1" : "0" },
                 new { Name = "蜂鸣器", Value = state.BuzzerResult, Result = state.BuzzerResult == "正常" ? "1" : "0" },
-                new { Name = "按键", Value = state.ButtonResult, Result = state.ButtonResult == "正常" ? "1" : "0" }
+                new { Name = "按键", Value = state.ButtonResult, Result = state.ButtonResult == "正常" ? "1" : "0" },
+                new { Name = "MES上传", Value = mesUploaded ? "成功" : "失败", Result = mesUploaded ? "1" : "0" }
             };
+
+            if (mesError != null)
+            {
+                testData.Add(new { Name = "MES失败原因", Value = mesError, Result = "0" });
+            }
 
             if (result != null)
             {
@@ -976,6 +1159,6 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
             CurrentMaterialNumber = materialNumber;
         }
 
-        RefreshPorts();
+        _ = RefreshPortsAsync(); // 导航进入时后台刷新串口列表，不阻塞页面呈现
     }
 }

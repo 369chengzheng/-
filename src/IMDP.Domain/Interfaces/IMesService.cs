@@ -156,6 +156,23 @@ public class MesProductInfoByMoResult
 }
 
 /// <summary>
+/// MES 测试数据单项（对应 IMDS Base.Models.ProductItem）
+/// <para>Code = MES 检测项目编码（如 C-12VDYJC / Z-BHSZ），
+/// Data = 检测数据（实测值），Result = 单项判定（"1" 通过 / "0" 未通过）。</para>
+/// </summary>
+public class MesProductItem
+{
+    /// <summary>MES 检测项目编码</summary>
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>检测数据（实测值或状态文本）</summary>
+    public string Data { get; set; } = string.Empty;
+
+    /// <summary>单项判定（"1" 通过 / "0" 未通过）</summary>
+    public string Result { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// MES 系统接口
 /// <para>封装与 MES（制造执行系统）的通信，提供制令单-物料号查询与用户登录鉴权等能力。</para>
 /// <para>实现类位于 Infrastructure 层，通过 HTTP 调用 MES 接口交互。</para>
@@ -229,6 +246,21 @@ public interface IMesService
     /// <param name="testResult">测试结果串</param>
     /// <param name="errCode">错误码串</param>
     Task<MesOperationResult> SaveProcedure2Async(string assyMoNumber, string proBar, int result, string userCode, string resCode, string testResult, string errCode);
+
+    /// <summary>
+    /// 保存工序结果到 MES（IMDS 兼容载荷版，对应 IMDS MesService.SaveProcedure）。
+    /// <para>内部先 GetProductInfo 工序卡控，再用 MES 下发的 TestClassinfo 测试项列表
+    /// 匹配本地测试数据（回填 ti_Class），按 IMDS 嵌套结构（TestResult.test_result.
+    /// product_result_item.product_result[]）序列化后 POST SaveProcedure。
+    /// 任一匹配项 Result != "1" 时整体 result 置 0，Errcode 拼接 ",BL-项目码"。</para>
+    /// </summary>
+    /// <param name="proBar">产品序列号（表具条码）</param>
+    /// <param name="result">检测结果（0=不合格，1=合格；仅作载荷顶层字段，单项判定参与实际综合）</param>
+    /// <param name="userCode">操作员工号</param>
+    /// <param name="resCode">资源编码/工位（MES 登录工位）</param>
+    /// <param name="testItems">测试数据列表（Code/Data/Result）</param>
+    /// <returns>MES 操作结果；Success 为 true 表示上传成功</returns>
+    Task<MesOperationResult> SaveProcedureAsync(string proBar, int result, string userCode, string resCode, IReadOnlyList<MesProductItem> testItems);
 
     /// <summary>
     /// 批量获取产品测试数据（对应 AutoFrock MESMethod.GetProductTestData，底层 EqOperation.GetTestResult）。

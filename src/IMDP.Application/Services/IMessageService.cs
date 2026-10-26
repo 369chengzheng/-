@@ -23,6 +23,15 @@ public interface IMessageService
     /// <param name="title">提示标题，默认“警告”。</param>
     void ShowWarning(string message, string title = "警告");
 
+    /// <summary>
+    /// 显示表号重复警告对话框
+    /// <para>模态弹窗（需用户确认后关闭），由 Presentation 层以 HandyControl 风格 MessageBox 实现，
+    /// 用于扫码录入表号防重校验失败时提示用户重新输入。</para>
+    /// </summary>
+    /// <param name="message">警告内容（应包含重复的表号及已占用的工位号）。</param>
+    /// <param name="title">提示标题，默认“表号重复”。</param>
+    void ShowDuplicateEquipmentCodeWarning(string message, string title = "表号重复");
+
     /// <summary>显示错误提示（同时写入错误日志）。</summary>
     /// <param name="message">错误内容。</param>
     /// <param name="title">提示标题，默认“错误”。</param>

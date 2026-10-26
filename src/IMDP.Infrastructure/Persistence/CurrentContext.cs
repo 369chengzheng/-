@@ -18,6 +18,8 @@ public class CurrentContext : ICurrentContext
     // 默认用户名为 "system"，表示系统级操作
     private string _userName = "system";
     private string _role = string.Empty;
+    // 当前登录工位（MES 资源编码 ResCode；空 = 未设置）
+    private string _station = string.Empty;
     // 当前登录成功写入 LoginConfig 表的记录 Id（用于登出时回填登出时间）
     private long? _currentLoginRecordId;
 
@@ -28,6 +30,9 @@ public class CurrentContext : ICurrentContext
     public string UserName => _userName;
 
     public string Role => _role;
+
+    /// <summary>当前登录工位（MES 资源编码 ResCode）；未设置时返回空串。</summary>
+    public string Station => _station;
 
     /// <summary>当前登录成功写入 LoginConfig 表的记录 Id（登出时回填登出时间用；未登录为 null）</summary>
     public long? CurrentLoginRecordId => _currentLoginRecordId;
@@ -50,6 +55,15 @@ public class CurrentContext : ICurrentContext
     }
 
     /// <summary>
+    /// 设置当前登录工位（MES 资源编码 ResCode）。
+    /// </summary>
+    /// <param name="station">登录工位名称；null 或空白按未设置处理。</param>
+    public void SetStation(string station)
+    {
+        _station = station?.Trim() ?? string.Empty;
+    }
+
+    /// <summary>
     /// 记录当前登录写入 LoginConfig 表的记录 Id（登出时回填登出时间用）。
     /// </summary>
     /// <param name="loginRecordId">刚写入的登录记录主键 Id</param>
@@ -65,6 +79,7 @@ public class CurrentContext : ICurrentContext
     {
         _userName = "system";
         _role = string.Empty;
+        _station = string.Empty;
         _currentLoginRecordId = null;
     }
 }

@@ -5,7 +5,8 @@
 //           固定行（红外串口/检测状态/表具条码/LED/蜂鸣器/按键）+
 //           配置项自动检测结果行（序号自 7 起）；每行承载序号、项目名称与
 //           各工位结果单元格；每个单元格含实测值与红绿判定，检测完成后由
-//           ViewModel 填充。
+//           ViewModel 填充。红外串口行（行 1）为串口选择行（Kind=Port），
+//           单元格内嵌串口下拉框而非结果文本。
 // =============================================================================
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -56,6 +57,9 @@ public partial class LaserDetectorResultRow : ObservableObject
 /// </summary>
 public enum LaserDetectorResultRowKind
 {
+    /// <summary>串口选择行：单元格内嵌串口下拉框（单工位共用一个串口，全部绑定 ViewModel 同一 SelectedPort）</summary>
+    Port,
+
     /// <summary>自动检测结果行：红绿文本单元格</summary>
     Auto,
 

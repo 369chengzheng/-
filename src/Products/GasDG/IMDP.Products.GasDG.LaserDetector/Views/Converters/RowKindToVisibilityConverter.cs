@@ -73,3 +73,10 @@ public sealed class BarcodeRowToVisibilityConverter : RowKindToVisibilityConvert
     /// <inheritdoc/>
     protected override LaserDetectorResultRowKind ExpectedKind => LaserDetectorResultRowKind.Barcode;
 }
+
+/// <summary>串口选择行转换器：Kind=Port 时可见（串口下拉框单元格）</summary>
+public sealed class PortRowToVisibilityConverter : RowKindToVisibilityConverterBase
+{
+    /// <inheritdoc/>
+    protected override LaserDetectorResultRowKind ExpectedKind => LaserDetectorResultRowKind.Port;
+}

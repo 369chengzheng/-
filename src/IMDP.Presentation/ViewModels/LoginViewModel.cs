@@ -115,6 +115,9 @@ public partial class LoginViewModel : ObservableObject, INavigationAware
             }
 
             _currentContext.SetUser(user.WorkNumber, user.Role);
+            // 记录登录工位为 MES 资源编码（ResCode）：MES 上传 SaveProcedure 与
+            // 登录校验同源，保证该工位对当前产品已通过工序卡控
+            _currentContext.SetStation(Station);
 
             // 登录成功记入日志（工位 + 工号 + 姓名 + 角色）
             _logger.Info($"登录成功：工位={Station}，工号={user.WorkNumber}，姓名={user.Name}，角色={user.Role}");

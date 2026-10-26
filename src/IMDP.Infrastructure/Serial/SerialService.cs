@@ -3,12 +3,15 @@
 // 功能描述：串口服务实现
 //           实现 ISerialService 接口，提供多串口并发管理、命令队列与重试、
 //           自动重连、USB 端口热插拔监视等完整能力，并通过事件对外通知状态变更。
+//           收发字节经 NLog 落盘（logger 名 = 本类全名，nlog.config 按
+//           IMDP.Infrastructure.Serial.* 前缀路由到 serial_日期.txt）。
 // =============================================================================
 using System.Collections.Concurrent;
 using System.IO.Ports;
 using System.Management;
 using System.Runtime.Versioning;
 using IMDP.Domain.ValueObjects;
+using NLog;
 
 namespace IMDP.Infrastructure.Serial;
 
@@ -19,6 +22,9 @@ namespace IMDP.Infrastructure.Serial;
 /// </summary>
 public class SerialService : ISerialService
 {
+    /// <summary>NLog 日志器（串口收发与状态记录；logger 名落在 IMDP.Infrastructure.Serial.* 前缀，单独进串口日志）</summary>
+    private static readonly ILogger _logger = LogManager.GetLogger(typeof(SerialService).FullName);
+
     /// <summary>已打开的串口包装器字典（按串口名索引）。</summary>
     private readonly ConcurrentDictionary<string, SerialPortWrapper> _ports = new();
     /// <summary>每个串口的自动重连配置字典。</summary>
@@ -90,7 +96,11 @@ public class SerialService : ISerialService
 
         var port = new SerialPort(portName, config.BaudRate, parity, config.DataBits, stopBits)
         {
-            ReadTimeout = 500,
+            // 读超时必须为无限：本串口的唯一读方是包装器的后台异步读循环（ReadAsync
+            // 内部会把超时临时改为无限再恢复，该 SetCommTimeouts 往返在部分 USB 串口
+            // 驱动上会中止在途读并抛 ERROR_OPERATION_ABORTED，杀死接收循环）；
+            // 应用层等待一律走 DataReceived 事件，不受此超时影响。写超时保留有限值。
+            ReadTimeout = SerialPort.InfiniteTimeout,
             WriteTimeout = 500,
             DtrEnable = false,
             RtsEnable = false
@@ -109,6 +119,7 @@ public class SerialService : ISerialService
             _commandQueues[portName] = new ConcurrentQueue<CommandRequest>();
             wrapper.StartReadLoop();
 
+            _logger.Info($"[{portName}] 串口已打开：波特率={config.BaudRate}，数据位={config.DataBits}，停止位={stopBits}，校验位={parity}");
             OnPortStatusChanged(portName, SerialPortStatus.Opened, "串口已打开");
             return true;
         }
@@ -150,6 +161,7 @@ public class SerialService : ISerialService
             _reconnectConfigs.TryRemove(portName, out _);
             _commandQueues.TryRemove(portName, out _);
 
+            _logger.Info($"[{portName}] 串口已关闭");
             OnPortStatusChanged(portName, SerialPortStatus.Closed, "串口已关闭");
         }
         catch (Exception ex)
@@ -333,7 +345,7 @@ public class SerialService : ISerialService
     }
 
     /// <summary>
-    /// 触发通信日志事件。
+    /// 触发通信日志事件，并将收发字节同步写入 NLog 串口日志文件
     /// </summary>
     /// <param name="portName">串口名称。</param>
     /// <param name="direction">通信方向。</param>
@@ -341,6 +353,11 @@ public class SerialService : ISerialService
     /// <param name="description">描述信息。</param>
     private void LogCommunication(string portName, CommunicationDirection direction, byte[] data, string description)
     {
+        // 串口日志落盘：方向 + 描述 + 字节数 + 十六进制内容（与 CommunicationLog 事件同一口径）
+        string directionText = direction == CommunicationDirection.Send ? "发送" : "接收";
+        _logger.Info(
+            $"[{portName}] {directionText}({description}) {data.Length}字节：{BitConverter.ToString(data).Replace('-', ' ')}");
+
         CommunicationLog?.Invoke(this, new CommunicationLogEventArgs
         {
             PortName = portName,

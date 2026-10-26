@@ -35,7 +35,17 @@ public enum LaserDetectorStationPhase
     Failed,
 
     /// <summary>串口通信失败（红色）</summary>
-    CommFailed
+    CommFailed,
+
+    /// <summary>MES 上传失败（红色；测试本身完成但上传 MES 被拒/异常，本轮按不合格处理）</summary>
+    MesFailed,
+
+    /// <summary>
+    /// 检测超时（红色；查询指令 0xAC 轮询耗尽总超时未收到结果帧，本轮按不合格处理）
+    /// <para>界面报错优先级最高：超时 &gt; 检测项不通过 &gt; MES 上传失败，
+    /// 超时状态下后续 MES 上传成败均不覆盖本状态。</para>
+    /// </summary>
+    Timeout
 }
 
 /// <summary>
@@ -85,6 +95,14 @@ public partial class LaserDetectorStationState : ObservableObject
     [ObservableProperty]
     private bool _isAutoTesting;
 
+    /// <summary>
+    /// 本轮结果是否已上报（MES 上传 + 本地记录保存）
+    /// <para>扫码开始新一轮检测时重置；人工项判定与自动失败路径据此保证每轮只上报一次
+    /// （对应 IMDS _inspectionSaved 防重标志）。</para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _isResultReported;
+
     /// <summary>LED 指示灯人工测试结果</summary>
     [ObservableProperty]
     private string _ledResult = ManualOptions[0];
@@ -112,6 +130,7 @@ public partial class LaserDetectorStationState : ObservableObject
         TestDurationTime = TimeSpan.Zero;
         IsAutoPassed = false;
         IsAutoTesting = false;
+        IsResultReported = false;
         LedResult = ManualOptions[0];
         BuzzerResult = ManualOptions[0];
         ButtonResult = ManualOptions[0];

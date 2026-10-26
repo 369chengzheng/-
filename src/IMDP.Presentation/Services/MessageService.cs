@@ -28,6 +28,14 @@ public class MessageService : IMessageService
         => Show(message, title, System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
 
     /// <inheritdoc />
+    public void ShowDuplicateEquipmentCodeWarning(string message, string title = "表号重复")
+    {
+        // 表号重复属于输入错误：使用 HandyControl 风格 MessageBox（与主界面主题一致）模态提示，
+        // 用户确认后才能继续，避免重复表号被静默忽略
+        ShowHandyMessageBoxOnUi(message, title);
+    }
+
+    /// <inheritdoc />
     public void ShowError(string message, string title = "错误")
     {
         // 打通日志与提示：错误弹窗自动落 NLog
@@ -80,6 +88,35 @@ public class MessageService : IMessageService
         else
         {
             app.Dispatcher.Invoke(show);
+        }
+    }
+
+    /// <summary>
+    /// 在 UI 线程上显示 HandyControl 风格 MessageBox（后台线程调用时自动调度回 UI 线程）。
+    /// </summary>
+    /// <param name="message">提示内容。</param>
+    /// <param name="title">提示标题。</param>
+    private static void ShowHandyMessageBoxOnUi(string message, string title)
+    {
+        var app = System.Windows.Application.Current;
+        if (app == null)
+        {
+            return;
+        }
+
+        void Show() => HandyControl.Controls.MessageBox.Show(
+            message,
+            title,
+            System.Windows.MessageBoxButton.OK,
+            System.Windows.MessageBoxImage.Warning);
+
+        if (app.Dispatcher.CheckAccess())
+        {
+            Show();
+        }
+        else
+        {
+            app.Dispatcher.Invoke(Show);
         }
     }
 
