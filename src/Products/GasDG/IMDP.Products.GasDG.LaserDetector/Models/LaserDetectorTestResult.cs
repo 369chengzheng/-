@@ -85,10 +85,16 @@ namespace IMDP.Products.GasDG.LaserDetector.Models
                     continue;
                 }
 
+                // 蓝牙/星闪项的 MES 数据按产线要求上传 0/1（正常"1"、异常"0"），
+                // 不再上传"星闪/蓝牙"等展示文本（MAC 地址仅界面展示，不上传）；
+                // 其余检测项仍上传实测值文本
+                string mesData = item.Code is LaserDetectorItemCodes.Bluetooth or LaserDetectorItemCodes.StarFlash
+                    ? (displayItem.IsPassed ? "1" : "0")
+                    : displayItem.Value;
                 items.Add(new Domain.Interfaces.MesProductItem
                 {
                     Code = item.MesCode,
-                    Data = displayItem.Value,
+                    Data = mesData,
                     Result = displayItem.IsPassed ? "1" : "0"
                 });
             }
@@ -314,7 +320,8 @@ namespace IMDP.Products.GasDG.LaserDetector.Models
                 LaserDetectorItemCodes.Iccid => Iccid,
                 LaserDetectorItemCodes.SignalStrength => SignalStrength.ToString(),
                 LaserDetectorItemCodes.Flash => GetNormalStatus(FlashStatus),
-                LaserDetectorItemCodes.Bluetooth or LaserDetectorItemCodes.StarFlash => GetWirelessStatus(),
+                LaserDetectorItemCodes.Bluetooth => GetWirelessStatus(),
+                LaserDetectorItemCodes.StarFlash => GetStarFlashDisplay(),
                 LaserDetectorItemCodes.MethaneSensor => GetNormalStatus(MethaneSensorStatus),
                 LaserDetectorItemCodes.PassiveTest => GetNormalStatus(PassiveTestStatus),
                 LaserDetectorItemCodes.ActiveTest => GetNormalStatus(ActiveTestStatus),
@@ -356,6 +363,24 @@ namespace IMDP.Products.GasDG.LaserDetector.Models
                 0x02 => "星闪",
                 _ => $"未知({BluetoothStarFlashStatus})"
             };
+        }
+
+        /// <summary>
+        /// 生成星闪项的界面展示文本：状态 + 星闪 MAC 地址
+        /// <para>产线要求星闪时将读到的 MAC 地址一并在界面显示；
+        /// MAC 已由协议层按 ASCII 解析（定长 12 字节，去除尾部填充），
+        /// 此处直接拼接展示。状态异常（非 0x02）时 MAC 字段无意义，仅展示状态文本。</para>
+        /// </summary>
+        /// <returns>形如"星闪 582D341A2B3C"的展示文本；非星闪状态时仅返回状态文本</returns>
+        private string GetStarFlashDisplay()
+        {
+            string status = GetWirelessStatus();
+            if (BluetoothStarFlashStatus == 0x02 && !string.IsNullOrWhiteSpace(StarFlashMacAddress))
+            {
+                return $"{status} {StarFlashMacAddress}";
+            }
+
+            return status;
         }
 
         #endregion

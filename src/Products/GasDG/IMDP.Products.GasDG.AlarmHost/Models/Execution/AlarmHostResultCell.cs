@@ -28,6 +28,11 @@ public sealed class AlarmHostResultCell(int stationNumber) : ObservableObject
     private string _message = "";
 
     /// <summary>
+    /// 区分尚未执行与已读取但不参与合格判定的结果。
+    /// </summary>
+    public bool HasResult { get; private set; }
+
+    /// <summary>
     /// 结果所属工位号，从一开始
     /// </summary>
     public int StationNumber { get; } = stationNumber;
@@ -73,6 +78,7 @@ public sealed class AlarmHostResultCell(int stationNumber) : ObservableObject
     /// </summary>
     public void Clear(string value = "")
     {
+        HasResult = false;
         Value = value;
         MesValue = "";
         IsPass = null;
@@ -84,6 +90,7 @@ public sealed class AlarmHostResultCell(int stationNumber) : ObservableObject
     /// </summary>
     public void Apply(AlarmHostItemResult result)
     {
+        HasResult = true;
         Value = result.Value;
         MesValue = result.MesValue;
         IsPass = result.IsPass;

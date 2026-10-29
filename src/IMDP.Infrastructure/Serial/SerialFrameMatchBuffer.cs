@@ -272,6 +272,22 @@ public sealed class SerialFrameMatchBuffer : IDisposable
     }
 
     /// <summary>
+    /// 缓冲是否已释放（只读探测）
+    /// <para>供检测服务在轮询循环中快速识别「串口关闭/工位重配已拆除通信链路」，
+    /// 立即终止本轮检测，避免僵尸轮次空转到总超时。</para>
+    /// </summary>
+    public bool IsDisposed
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _disposed;
+            }
+        }
+    }
+
+    /// <summary>
     /// 释放缓冲：清空全部数据，并让全部等待者立即以 null 完成（等待方按未等到帧处理）
     /// </summary>
     public void Dispose()

@@ -59,7 +59,7 @@ public sealed class AlarmHostConfigListItem
             {
                 var item = plan.Parameters.FirstOrDefault(parameter => parameter.Code == definition.Key && parameter.IsEnabled);
                 if (item == null) return "未启用";
-                return item.Parameters.Count == 0 ? "启用" : string.Join(",", item.Parameters.Select(parameter => parameter.Value));
+                return !definition.HasVisibleParameters ? "启用" : string.Join(",", item.Parameters.Select(parameter => parameter.Value));
             }, StringComparer.Ordinal))
     };
 }

@@ -441,18 +441,20 @@ public class LaserDetectorDetectService
     }
 
     /// <summary>
-    /// 销毁单个工位通信单元（同步取消令牌并及时释放资源）
+    /// 销毁单个工位通信单元（同步取消令牌并及时释放缓冲资源）
     /// </summary>
     /// <param name="state">待销毁的工位通信单元</param>
     private static void TeardownStation(StationCommState state)
     {
-        // ① 同步取消：Cancel() 返回时消费循环已终止，队列残留指令直接丢弃
+        // ① 同步取消：Cancel() 返回时消费循环已终止，队列残留指令直接丢弃。
+        //    只 Cancel 不 Dispose：在测轮次的 finally 仍会 Cancel 该 CTS，
+        //    若此处先 Dispose，后续 Cancel / Token 访问将抛 ObjectDisposedException
+        //    （界面闪退根因）；CTS 未注册 Timer/回调，无句柄泄漏，交 GC 回收即可
         state.SendCts.Cancel();
-        // ② 释放取消源（Cancel 先于 Dispose，消费方仅消费令牌不持有句柄，安全）
-        state.SendCts.Dispose();
-        // ③ 释放接收缓冲：清空 List 并立即唤醒全部等待者返回 null
+        // ② 释放接收缓冲：清空 List 并立即唤醒全部等待者返回 null；
+        //    在测轮次经轮询循环的 IsDisposed 探测立即终止本轮
         state.Buffer.Dispose();
-        // ④ 阶段复位为 A 待测（防御性：单元销毁后不再复用，保持语义完整）
+        // ③ 阶段复位为 A 待测（防御性：单元销毁后不再复用，保持语义完整）
         state.Phase = StationCommPhase.AwaitingTest;
     }
 
@@ -649,6 +651,16 @@ public class LaserDetectorDetectService
             int queryCount = 0;
             while (Environment.TickCount64 < deadlineTick)
             {
+                // 链路拆除探测：关闭串口/离开页面/工位重配会释放本工位缓冲，
+                // 在测轮次若继续空转将僵尸占用至总超时（最长 120s）；
+                // 探测到已释放立即按查询超时终止，交由界面走既有超时提示路径
+                if (commState.Buffer.IsDisposed)
+                {
+                    commState.Phase = StationCommPhase.Faulted;
+                    _logger.Warn($"工位{station} 检测期间通信链路被拆除（串口关闭/工位重配），提前终止本轮检测");
+                    return LaserDetectorDetectOutcome.QueryTimeout();
+                }
+
                 await Task.Delay(QueryIntervalMs);
                 var sentTask = await SendViaStationChannelAsync(commState, queryCommand, commandSentCallback);
                 var sent = await WaitActualSendAsync(station, sentTask);
@@ -704,10 +716,20 @@ public class LaserDetectorDetectService
         finally
         {
             // 轮级清理：同步取消令牌（含节流等待中的在途指令，见 ThrottleToIntervalAsync）
-            // + 清空缓冲（List 跨轮复用，仅清数据）；随后回到 A 待测态，后续帧全部忽略；
-            // 全量清理后单元已不存在（finally 对已取消 CTS 再 Cancel 无感，
-            // 对已释放 Buffer 的 Clear 安全）
-            sendCts.Cancel();
+            // + 清空缓冲（List 跨轮复用，仅清数据）；随后回到 A 待测态，后续帧全部忽略。
+            // CTS 只 Cancel 不 Dispose（见 TeardownStation 注释），Cancel 对已取消令牌幂等无感；
+            // Clear 对已释放 Buffer 亦安全（锁内清 List，不触异常）；
+            // 异常防御：取消动作包 try-catch，确保任何情况下清理链路不会中断
+            try
+            {
+                sendCts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // 理论不可达（CTS 无任何 Dispose 调用点）：保留防御，
+                // 若未来引入释放逻辑，此处兜底避免闪退
+            }
+
             commState.Buffer.Clear();
             commState.Phase = StationCommPhase.AwaitingTest;
         }

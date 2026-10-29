@@ -1,7 +1,6 @@
 <!-- =============================================================================
      文件名：MainView.xaml
-     功能描述：主视图。提供制令单号与软件物料号输入及查询入口，
-               查询过程中显示加载动画遮罩。
+     功能描述：首页查询入口、MES 制令单基本信息与本地图片轮播。
      ============================================================================= -->
 <UserControl x:Class="IMDP.Presentation.Views.MainView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -10,139 +9,233 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              mc:Ignorable="d" 
-             d:DesignHeight="600" d:DesignWidth="800"
+             d:DesignHeight="900" d:DesignWidth="1600" Tag="Home"
              Background="{StaticResource ImdpPageBackgroundBrush}">
     <UserControl.Resources>
         <!-- 制令单信息只读字段：保留文本选择能力，方便管理员复制 MES 返回内容 -->
         <Style x:Key="HomeProductInfoLabelStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource ImdpMutedTextBrush}"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="0,0,8,12"/>
+            <Setter Property="Margin" Value="0,0,8,10"/>
+            <Setter Property="FontSize" Value="12"/>
         </Style>
         <Style x:Key="HomeProductInfoValueStyle" TargetType="TextBox">
             <Setter Property="IsReadOnly" Value="True"/>
             <Setter Property="IsReadOnlyCaretVisible" Value="True"/>
-            <Setter Property="Background" Value="#FAFBFC"/>
-            <Setter Property="BorderBrush" Value="{StaticResource ImdpBorderBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#E2E2E2"/>
+            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="FontSize" Value="14"/>
             <Setter Property="MinHeight" Value="34"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
-            <Setter Property="Margin" Value="0,0,20,12"/>
+            <Setter Property="Margin" Value="0,0,28,10"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="HomeQueryInputStyle" TargetType="TextBox">
+            <Setter Property="Width" Value="400"/>
+            <Setter Property="Height" Value="60"/>
+            <Setter Property="FontSize" Value="22"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#D0D0D0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="InputBorder" CornerRadius="5"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="InputBorder" Property="BorderBrush" Value="{StaticResource ImdpPrimaryActionBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="InputBorder" Property="Opacity" Value="0.55"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </UserControl.Resources>
-    <Grid>
+    <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
         <!-- 查询条件区：制令单号与软件物料号输入框及查询按钮 -->
-        <WrapPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,80,0,0">
-            <TextBlock Text="制令单号:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="14"/>
-            <TextBox materialDesign:HintAssist.Hint="请输入制令单号" 
-                     Text="{Binding OrderNumber, UpdateSourceTrigger=PropertyChanged}"
-                     Width="200" Margin="0,0,16,0"
-                     IsEnabled="{Binding IsNotQuerying}"/>
-
-            <TextBlock Text="软件物料号:" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="14"
-                       Visibility="{Binding ShowMaterialNumber, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-            <TextBox materialDesign:HintAssist.Hint="请输入物料号"
-                     Text="{Binding MaterialNumber, UpdateSourceTrigger=PropertyChanged}"
-                     Width="200" Margin="0,0,16,0"
-                     IsEnabled="{Binding IsNotQuerying}"
-                     Visibility="{Binding ShowMaterialNumber, Converter={StaticResource BooleanToVisibilityConverter}}"/>
-
-            <Button Content="查询" Command="{Binding QueryCommand}" Width="80" Height="32"
-                    IsEnabled="{Binding IsNotQuerying}"/>
-        </WrapPanel>
-
-        <!-- MES 制令单查询成功后展示完整产品信息；初始及手动物料查询时隐藏 -->
-        <ScrollViewer Grid.Row="1" Margin="16,30,16,16"
-                      VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
-            <Border Style="{StaticResource ManagementSurfaceStyle}"
-                    MaxWidth="960" HorizontalAlignment="Center" VerticalAlignment="Top"
-                    Padding="18"
-                    Visibility="{Binding HasProductInfo, Converter={StaticResource BooleanToVisibilityConverter}}">
-                <StackPanel>
-                    <DockPanel Margin="0,0,0,14">
-                        <TextBlock Text="制令单基本信息" FontSize="15" FontWeight="SemiBold"
-                                   Foreground="{StaticResource ImdpTextBrush}"/>
-                        <TextBlock DockPanel.Dock="Right" Text="MES 查询成功" FontSize="12"
-                                   Foreground="#16884D" VerticalAlignment="Center"/>
-                    </DockPanel>
-
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="2*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="2*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="2*"/>
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <TextBlock Grid.Row="0" Grid.Column="0" Text="制令单号" Style="{StaticResource HomeProductInfoLabelStyle}"/>
-                        <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource HomeProductInfoValueStyle}"
-                                 Text="{Binding ProductInfo.MoNumber, Mode=OneWay, TargetNullValue=未返回}"/>
-                        <TextBlock Grid.Row="0" Grid.Column="2" Text="产品编码" Style="{StaticResource HomeProductInfoLabelStyle}"/>
-                        <TextBox Grid.Row="0" Grid.Column="3" Style="{StaticResource HomeProductInfoValueStyle}"
-                                 Text="{Binding ProductInfo.ProductCode, Mode=OneWay, TargetNullValue=未返回}"/>
-                        <TextBlock Grid.Row="0" Grid.Column="4" Text="计划数量" Style="{StaticResource HomeProductInfoLabelStyle}"/>
-                        <TextBox Grid.Row="0" Grid.Column="5" Style="{StaticResource HomeProductInfoValueStyle}" Margin="0,0,0,12"
-                                 Text="{Binding ProductInfo.PlanQty, Mode=OneWay}"/>
-
-                        <TextBlock Grid.Row="1" Grid.Column="0" Text="产品名称" Style="{StaticResource HomeProductInfoLabelStyle}"/>
-                        <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
-                                 Style="{StaticResource HomeProductInfoValueStyle}"
-                                 Text="{Binding ProductInfo.ProductName, Mode=OneWay, TargetNullValue=未返回}"
-                                 TextWrapping="Wrap"/>
-                        <TextBlock Grid.Row="1" Grid.Column="4" Text="客户名称" Style="{StaticResource HomeProductInfoLabelStyle}"/>
-                        <TextBox Grid.Row="1" Grid.Column="5" Style="{StaticResource HomeProductInfoValueStyle}" Margin="0,0,0,12"
-                                 Text="{Binding ProductInfo.CustName, Mode=OneWay, TargetNullValue=未返回}"
-                                 TextWrapping="Wrap"/>
-
-                        <TextBlock Grid.Row="2" Grid.Column="0" Text="客户编码" Style="{StaticResource HomeProductInfoLabelStyle}"/>
-                        <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource HomeProductInfoValueStyle}"
-                                 Text="{Binding ProductInfo.CustCode, Mode=OneWay, TargetNullValue=未返回}"/>
-                        <TextBlock Grid.Row="2" Grid.Column="2" Text="软件物料号" Style="{StaticResource HomeProductInfoLabelStyle}"/>
-                        <TextBox Grid.Row="2" Grid.Column="3" Style="{StaticResource HomeProductInfoValueStyle}"
-                                 Text="{Binding PrimarySoftwareMaterialNumber, Mode=OneWay}"/>
-                        <TextBlock Grid.Row="2" Grid.Column="4" Text="主控板物料" Style="{StaticResource HomeProductInfoLabelStyle}"/>
-                        <TextBox Grid.Row="2" Grid.Column="5" Style="{StaticResource HomeProductInfoValueStyle}" Margin="0,0,0,12"
-                                 Text="{Binding PrimaryMainBoardCode, Mode=OneWay}"/>
-
-                        <TextBlock Grid.Row="3" Grid.Column="0" Text="产品规格" Style="{StaticResource HomeProductInfoLabelStyle}"
-                                   VerticalAlignment="Top" Margin="0,8,8,12"/>
-                        <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="5"
-                                 Style="{StaticResource HomeProductInfoValueStyle}" Margin="0,0,0,12"
-                                 MinHeight="58" VerticalContentAlignment="Top"
-                                 Text="{Binding ProductInfo.ProductSpec, Mode=OneWay, TargetNullValue=未返回}"
-                                 TextWrapping="Wrap" AcceptsReturn="True"/>
-                    </Grid>
-
-                    <TextBlock Text="软件/主板清单" FontSize="14" FontWeight="SemiBold"
-                               Foreground="{StaticResource ImdpTextBrush}" Margin="0,2,0,8"/>
-                    <DataGrid ItemsSource="{Binding ProductInfo.SoftwareList}"
-                              Style="{StaticResource ManagementDataGridStyle}"
-                              AutoGenerateColumns="False" IsReadOnly="True"
-                              CanUserAddRows="False" CanUserDeleteRows="False"
-                              HeadersVisibility="Column" MaxHeight="150">
-                        <DataGrid.Columns>
-                            <DataGridTextColumn Header="软件物料号" Binding="{Binding SoftItemCode}" Width="*"/>
-                            <DataGridTextColumn Header="主控板物料编码" Binding="{Binding MainBoardCode}" Width="*"/>
-                        </DataGrid.Columns>
-                    </DataGrid>
+        <Border Grid.Row="0" Background="White" Padding="40,28" Margin="0,0,0,10">
+            <!-- 窄窗口等比缩小查询行，避免输入框挤压或按钮移到第二行。 -->
+            <Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="制令单号:" VerticalAlignment="Center" Margin="0,0,20,0" FontSize="24"/>
+                    <TextBox x:Name="OrderNumberInput" Text="{Binding OrderNumber, UpdateSourceTrigger=PropertyChanged}"
+                             Style="{StaticResource HomeQueryInputStyle}" Margin="0,0,80,0"
+                             IsEnabled="{Binding IsNotQuerying}" KeyDown="QueryInputKeyDown"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,40,0"
+                                Visibility="{Binding ShowMaterialNumber, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock Text="软件物料号:" VerticalAlignment="Center" Margin="0,0,20,0" FontSize="24"/>
+                        <TextBox x:Name="MaterialNumberInput" Text="{Binding MaterialNumber, UpdateSourceTrigger=PropertyChanged}"
+                                 Style="{StaticResource HomeQueryInputStyle}"
+                                 IsEnabled="{Binding IsNotQuerying}" KeyDown="QueryInputKeyDown"/>
+                    </StackPanel>
+                    <Button Command="{Binding QueryCommand}" Width="138" Height="60" FontSize="24"
+                            Background="#0C3076" Style="{StaticResource SemanticQueryButtonStyle}"
+                            IsEnabled="{Binding IsNotQuerying}">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Magnify" Width="28" Height="28" Margin="0,0,16,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="查询" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
+            </Viewbox>
+        </Border>
+
+        <!-- 信息区与图片区按比例适应窗体；未查询时仍保留信息区空位 -->
+        <Grid Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="2*"/>
+                <RowDefinition Height="3*"/>
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Margin="0,0,0,10"
+                    HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Padding="30,24">
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource ManagementSurfaceStyle}">
+                        <Setter Property="Visibility" Value="Hidden"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasProductInfo}" Value="True">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
+                            <TextBlock Text="制令单基本信息" FontSize="16"
+                                       Foreground="{StaticResource ImdpTextBrush}"/>
+                            <TextBlock Margin="14,0,0,0" Text="MES查询成功" FontSize="12"
+                                       Foreground="#16884D" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="2*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="制令单号" Style="{StaticResource HomeProductInfoLabelStyle}"/>
+                            <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource HomeProductInfoValueStyle}"
+                                     Text="{Binding ProductInfo.MoNumber, Mode=OneWay, TargetNullValue=未返回}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="产品编码" Style="{StaticResource HomeProductInfoLabelStyle}"/>
+                            <TextBox Grid.Row="0" Grid.Column="3" Style="{StaticResource HomeProductInfoValueStyle}"
+                                     Text="{Binding ProductInfo.ProductCode, Mode=OneWay, TargetNullValue=未返回}"/>
+                            <TextBlock Grid.Row="0" Grid.Column="4" Text="计划数量" Style="{StaticResource HomeProductInfoLabelStyle}"/>
+                            <TextBox Grid.Row="0" Grid.Column="5" Style="{StaticResource HomeProductInfoValueStyle}" Margin="0,0,0,12"
+                                     Text="{Binding ProductInfo.PlanQty, Mode=OneWay}"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="产品名称" Style="{StaticResource HomeProductInfoLabelStyle}"/>
+                            <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3"
+                                     Style="{StaticResource HomeProductInfoValueStyle}"
+                                     Text="{Binding ProductInfo.ProductName, Mode=OneWay, TargetNullValue=未返回}"
+                                     TextWrapping="Wrap"/>
+                            <TextBlock Grid.Row="1" Grid.Column="4" Text="客户名称" Style="{StaticResource HomeProductInfoLabelStyle}"/>
+                            <TextBox Grid.Row="1" Grid.Column="5" Style="{StaticResource HomeProductInfoValueStyle}" Margin="0,0,0,12"
+                                     Text="{Binding ProductInfo.CustName, Mode=OneWay, TargetNullValue=未返回}"
+                                     TextWrapping="Wrap"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="客户编码" Style="{StaticResource HomeProductInfoLabelStyle}"/>
+                            <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource HomeProductInfoValueStyle}"
+                                     Text="{Binding ProductInfo.CustCode, Mode=OneWay, TargetNullValue=未返回}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="软件物料号" Style="{StaticResource HomeProductInfoLabelStyle}"/>
+                            <TextBox Grid.Row="2" Grid.Column="3" Style="{StaticResource HomeProductInfoValueStyle}"
+                                     Text="{Binding PrimarySoftwareMaterialNumber, Mode=OneWay}"/>
+                            <TextBlock Grid.Row="2" Grid.Column="4" Text="主控板物料" Style="{StaticResource HomeProductInfoLabelStyle}"/>
+                            <TextBox Grid.Row="2" Grid.Column="5" Style="{StaticResource HomeProductInfoValueStyle}" Margin="0,0,0,12"
+                                     Text="{Binding PrimaryMainBoardCode, Mode=OneWay}"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="产品规格" Style="{StaticResource HomeProductInfoLabelStyle}"
+                                       VerticalAlignment="Top" Margin="0,8,8,12"/>
+                            <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="5"
+                                     Style="{StaticResource HomeProductInfoValueStyle}" Margin="0,0,0,12"
+                                     MinHeight="34" VerticalContentAlignment="Center"
+                                     Text="{Binding ProductInfo.ProductSpec, Mode=OneWay, TargetNullValue=未返回}"
+                                     TextWrapping="Wrap" AcceptsReturn="True"/>
+                        </Grid>
+
+                        <!-- 单项清单已在信息区显示；多项仍可展开查看，保留 MES 返回内容。 -->
+                        <Expander Header="软件/主板清单" Margin="0,8,0,0">
+                            <Expander.Style>
+                                <Style TargetType="Expander">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasProductInfo}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ProductInfo.SoftwareList.Count}" Value="0">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding ProductInfo.SoftwareList.Count}" Value="1">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Expander.Style>
+                            <DataGrid ItemsSource="{Binding ProductInfo.SoftwareList}"
+                                      Style="{StaticResource ManagementDataGridStyle}"
+                                      AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserAddRows="False" CanUserDeleteRows="False"
+                                      HeadersVisibility="Column" MaxHeight="150">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="软件物料号" Binding="{Binding SoftItemCode}" Width="*"/>
+                                    <DataGridTextColumn Header="主控板物料编码" Binding="{Binding MainBoardCode}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
-        </ScrollViewer>
+
+            <!-- 图片作为本地资源随程序发布，不依赖网络；每五秒自动切换。 -->
+            <Grid Grid.Row="1" Background="#0C3076" ClipToBounds="True">
+                <!-- 等比铺满分配区域，窗体比例变化时由容器裁去超出的图片边缘。 -->
+                <Image x:Name="GasNetworkImage" Source="/IMDP;component/Assets/HomeGasNetwork.jpg"
+                       Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality"/>
+                <Image x:Name="CooperationImage" Source="/IMDP;component/Assets/HomeCooperation.jpg"
+                       Stretch="UniformToFill" RenderOptions.BitmapScalingMode="HighQuality" Visibility="Collapsed"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,28">
+                    <Border x:Name="GasNetworkIndicator" Width="24" Height="8" CornerRadius="4" Background="White" Margin="0,0,8,0"/>
+                    <Border x:Name="CooperationIndicator" Width="8" Height="8" CornerRadius="4" Background="White" Opacity="0.45"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
 
         <!-- 加载遮罩区：查询中显示旋转加载动画与提示文字 -->
         <Border Grid.RowSpan="2" Panel.ZIndex="10"

@@ -216,6 +216,8 @@ public partial class MainWindowViewModel : ObservableObject
             _currentOrderNumber = payload.OrderNumber.Trim();
             _currentProductName = string.IsNullOrEmpty(_currentOrderNumber) ? string.Empty : payload.ProductName.Trim();
 
+            _messageService.GrowlSuccess($"查询成功，软件物料号：{_currentMaterialNumber}，已加载 {MenuItems.Count} 个可用功能。");
+
             // 手动物料查询没有制令单号，不属于工单切换；同时结束之前的活动工单状态
             if (string.IsNullOrWhiteSpace(payload.OrderNumber))
             {
@@ -228,6 +230,7 @@ public partial class MainWindowViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.Error(ex, "处理主页菜单解析结果失败");
+            _messageService.ShowError("查询结果处理失败，请稍后重试。", "错误");
         }
     }
 

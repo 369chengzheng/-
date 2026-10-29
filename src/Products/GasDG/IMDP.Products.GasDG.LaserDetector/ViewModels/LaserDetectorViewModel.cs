@@ -67,6 +67,15 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
     [ObservableProperty]
     private ObservableCollection<string> _ports = new();
 
+    /// <summary>
+    /// 上次串口列表刷新时刻（TickCount64，毫秒），用于下拉刷新防抖：
+    /// 距上次刷新不足 <see cref="PortRefreshDebounceMs"/> 时跳过重复枚举
+    /// </summary>
+    private long _lastPortRefreshTick;
+
+    /// <summary>串口列表刷新防抖间隔（毫秒）：连续开关下拉不重复枚举串口</summary>
+    private const int PortRefreshDebounceMs = 800;
+
     /// <summary>当前选中的串口</summary>
     [ObservableProperty]
     private string _selectedPort = string.Empty;
@@ -82,6 +91,31 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
     /// <summary>当前关联的产品编码（失焦后从方案库加载配置）</summary>
     [ObservableProperty]
     private string _productCode = string.Empty;
+
+    /// <summary>
+    /// 本期软件启动后累计完成判定的产品数
+    /// <para>计数点为 MES 上传与记录保存的防重入口（全部完成路径的唯一汇聚点），
+    /// 每产品仅计一次；离开页面不清零，软件重启归零。</para>
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PassRateDisplay))]
+    private int _totalProducedCount;
+
+    /// <summary>本期软件启动后判定合格的产品数（含 MES 失败强制判不合格规则前的本地综合判定）</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PassRateDisplay))]
+    private int _qualifiedCount;
+
+    /// <summary>本期软件启动后判定不合格的产品数（检测项不通过/超时/通信失败/MES 失败）</summary>
+    [ObservableProperty]
+    private int _unqualifiedCount;
+
+    /// <summary>
+    /// 合格率展示文本（累计为 0 时显示 "--%"，避免除零）
+    /// </summary>
+    public string PassRateDisplay => TotalProducedCount == 0
+        ? "--%"
+        : $"{QualifiedCount * 100.0 / TotalProducedCount:F1}%";
 
     /// <summary>有源测试配置预览（如 01-仅测试输出功能）</summary>
     [ObservableProperty]
@@ -250,27 +284,69 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
 
     /// <summary>
     /// 刷新可用串口列表（后台线程枚举，避免 UI 卡顿；自动选中第一个）
-    /// <para>由 [RelayCommand] 生成 RefreshPortsCommand。串口枚举
-    /// （SerialPort.GetPortNames）在含虚拟串口驱动的机器上可能同步阻塞数百毫秒，
-    /// 故放入 Task.Run 后台执行；刷新后仅当列表内容变化时才替换集合实例，
-    /// 已选串口仍在列表中时保持不变，避免下拉闪变与选择被重置。</para>
+    /// <para>由 [RelayCommand] 生成 RefreshPortsCommand。三项防卡顿措施：
+    /// ①串口枚举（SerialPort.GetPortNames）在含虚拟串口驱动的机器上可能同步阻塞
+    /// 数百毫秒，放入 Task.Run 后台执行（UI 线程零阻塞）；
+    /// ②800ms 防抖：连续开关下拉不重复枚举（下拉已打开时再次展开直接复用现列表）；
+    /// ③原地最小差异更新：枚举结果先按串口名排序归一化（GetPortNames 返回顺序
+    /// 不稳定，顺序抖动会击穿内容不变早退判断），内容变化时不再整体替换
+    /// ObservableCollection 实例，而是在原集合上仅增删差异项——表格行 1 各工位
+    /// ComboBox 全部绑定同一 Ports 集合，实例替换会触发 N 个下拉全量重建
+    /// items 容器（叠加深层模板开销），原地 diff 后通常仅 0-1 项变化，
+    /// 消除「打开下拉瞬间卡顿」。已选串口仍在列表中时保持不变。</para>
     /// </summary>
     [RelayCommand]
     private async Task RefreshPortsAsync()
     {
-        // 后台线程枚举串口：UI 线程零阻塞（修复首次打开下拉/进入页面时的明显卡顿）
-        var ports = await Task.Run(() => _detectService.GetAvailablePorts());
-
-        // 内容未变化时保留原集合实例：ComboBox 不重建，避免下拉闪变
-        if (Ports != null && Ports.SequenceEqual(ports))
+        // 防抖：距上次刷新不足 800ms 直接返回（连续开关下拉不重复枚举）
+        long now = Environment.TickCount64;
+        if (now - _lastPortRefreshTick < PortRefreshDebounceMs)
         {
             return;
         }
 
-        Ports = new ObservableCollection<string>(ports);
-        if (Ports.Count > 0 && (string.IsNullOrEmpty(SelectedPort) || !Ports.Contains(SelectedPort)))
+        _lastPortRefreshTick = now;
+
+        // 后台线程枚举串口：UI 线程零阻塞（修复首次打开下拉/进入页面时的明显卡顿）
+        var ports = await Task.Run(() => _detectService.GetAvailablePorts());
+
+        // 排序归一化：GetPortNames 返回顺序不稳定，排序后才能可靠比较「内容是否变化」
+        var sortedPorts = ports
+            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        // 防御性兜底：字段初始化即空集合，正常不为 null；万一被外部置空则原地重建，
+        // 后续差异更新统一在 current（与 Ports 同一实例）上操作
+        var current = Ports ??= new ObservableCollection<string>();
+
+        // 内容未变化时保留原集合：ComboBox 不重建，避免下拉闪变
+        if (current.SequenceEqual(sortedPorts))
         {
-            SelectedPort = Ports[0];
+            return;
+        }
+
+        // 原地最小差异更新：不替换集合实例（N 个工位 ComboBox 共绑同一集合，
+        // 替换实例 = 全量重建全部下拉容器），仅在原集合上移除消失项、插入新增项；
+        // 列表规模小（通常 <10），Contains 线性查找开销可忽略
+        for (int i = current.Count - 1; i >= 0; i--)
+        {
+            if (!sortedPorts.Contains(current[i]))
+            {
+                current.RemoveAt(i);
+            }
+        }
+
+        foreach (var port in sortedPorts)
+        {
+            if (!current.Contains(port))
+            {
+                current.Insert(sortedPorts.IndexOf(port), port);
+            }
+        }
+
+        if (current.Count > 0 && (string.IsNullOrEmpty(SelectedPort) || !current.Contains(SelectedPort)))
+        {
+            SelectedPort = current[0];
         }
     }
 
@@ -321,15 +397,55 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
         _logger.Info($"已关闭串口：{_portName}");
         OpenedPortName = string.Empty;
         IsSerialOpen = false;
-        // 串口关闭后同步表格固定行（行 1 红外串口清空）
-        RefreshFixedRows();
         foreach (var station in Stations)
         {
             station.Reset();
         }
 
+        // 关闭串口视为本轮生产结束：结果表格同步清空全部工位的已展示结果，
+        // 与工位状态 Reset 保持一致（自动行恢复待检测占位、人工行恢复"正常"、
+        // 状态行经 RefreshFixedRows 回到"00:00-待检测"中性色）
+        foreach (var station in Stations)
+        {
+            ClearStationCells(station.Station);
+            ResetManualCells(station.Station);
+        }
+
+        // 卫生清理：丢弃缓存的自动项 MES 数据（新扫码会重新生成并缓存）
+        _stationAutoMesItems.Clear();
         _stopwatches.Clear();
+        // 串口关闭后同步表格固定行（行 1 红外串口清空；行 2 按复位后的 Idle 状态刷新）
+        RefreshFixedRows();
         _messageService.GrowlInfo("串口已关闭！");
+    }
+
+    /// <summary>
+    /// 结束当前工单：经确认后关闭串口并通知宿主清除生效物料、菜单后返回首页
+    /// <para>由 [RelayCommand] 生成 EndWorkOrderCommand；与报警主机（AlarmHost）
+    /// 结束工单行为一致：本地结束，不调用 MES 结单、不删除历史记录、不退出登录。</para>
+    /// <para>流程：Growl 确认弹窗 → 关闭串口（含工位复位与表格清空，复用
+    /// <see cref="CloseSerialAsync"/>）→ 发布 <see cref="EndWorkOrderEvent"/>，
+    /// 宿主（MainWindowViewModel）收到后移除本页面（自动触发页面整体重置）并返回首页。</para>
+    /// </summary>
+    [RelayCommand]
+    private async Task EndWorkOrderAsync()
+    {
+        // Growl 确认弹窗（异步回调转可等待任务，模式与 AlarmHostViewModel.EndWorkOrderAsync 一致）
+        var confirmation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _messageService.GrowlConfirm("结束当前工单并返回首页？", answer => confirmation.TrySetResult(answer));
+        if (!await confirmation.Task)
+        {
+            return;
+        }
+
+        // 串口打开时先关闭（含工位复位、表格清空与计时器清理）
+        if (IsSerialOpen && !string.IsNullOrEmpty(_portName))
+        {
+            await CloseSerialAsync();
+        }
+
+        // 通知宿主结束工单：清除生效物料与菜单、移除本页面并返回首页
+        _eventAggregator.GetEvent<EndWorkOrderEvent>().Publish();
     }
 
     /// <summary>
@@ -779,10 +895,17 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
 
     /// <summary>
     /// 扫码或回车触发指定工位的自动检测
-    /// <para>由 [RelayCommand] 生成 StationScanCommand（参数为工位号）。</para>
+    /// <para>由 [RelayCommand] 生成 StationScanCommand（参数为工位号）。
+    /// 必须允许并发执行：AsyncRelayCommand 默认禁止并发（运行中 CanExecute=false），
+    /// 曾导致任一工位检测期间（最长 120s）其他工位扫码触发全部被静默吞掉，
+    /// 界面表现为「多工位仅一工位能触发测试」。并发安全性依据：
+    /// ①方法入口 IsAutoTesting 工位级防重入（同一工位重复触发仍被拦截）；
+    /// ②服务层每工位独立接收缓冲 + 独立发送 Channel，写串口经全局 2s 节流排队；
+    /// ③VM 内部集合（_stopwatches/_stationAutoMesItems/Stations/ResultRows）
+    /// 仅在 UI 线程访问，async 延续不切线程，无共享竞争。</para>
     /// </summary>
     /// <param name="station">工位号（1 起，来源于数据库方案配置）</param>
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task StationScanAsync(int station)
     {
         var state = Stations.FirstOrDefault(s => s.Station == station);
@@ -984,6 +1107,11 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
 
         state.IsResultReported = true;
 
+        // 生产统计：产品完成判定即累计（防重标志保证每产品仅计一次）；
+        // 此处 isPass 为 MES 失败规则修正前的本地综合判定，MES 失败在下方强制判不合格后
+        // 不再回补统计（以最终落库判定为准的口径在 SaveRecordAsync 前统一，见下方二次修正）
+        TotalProducedCount++;
+
         string barcode = state.EquipmentCode;
         string userCode = _currentContext.UserName;
         string resCode = _currentContext.Station;
@@ -1037,6 +1165,16 @@ public partial class LaserDetectorViewModel : ObservableObject, INavigationAware
         }
 
         // 本地记录无论 MES 成败均保存（MES 结果随记录落库便于追溯）
+        // 生产统计二次修正：以 MES 规则修正后的最终 isPass 口径计数合格/不合格
+        if (isPass)
+        {
+            QualifiedCount++;
+        }
+        else
+        {
+            UnqualifiedCount++;
+        }
+
         await SaveRecordAsync(state, isPass, result, mesResult.Success, mesResult.ErrorInfo);
     }
 

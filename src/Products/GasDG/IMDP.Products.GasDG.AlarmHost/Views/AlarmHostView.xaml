@@ -24,7 +24,7 @@
                 </RowDefinition.Style>
             </RowDefinition>
             <!-- 固定表头及底部统计之外，窄窗仍保留至少一行完整结果视口。 -->
-            <RowDefinition Height="*" MinHeight="312"/>
+            <RowDefinition Height="*" MinHeight="280"/>
         </Grid.RowDefinitions>
 
         <Border Margin="0,0,0,10" Padding="20,8" Height="46" Style="{StaticResource ManagementSurfaceStyle}">
@@ -66,20 +66,18 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                             <TextBlock Text="产品编码:" VerticalAlignment="Center"/>
                             <TextBox x:Name="ProductCodeInput" Grid.Column="1" Style="{StaticResource PlanParameterInputStyle}" MaxLength="100"
+                                     materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
                                      ToolTip="填写完整产品编码" Text="{Binding ProductCode, UpdateSourceTrigger=PropertyChanged}"/>
                         </Grid>
                         <Grid Width="260" Margin="0,0,20,4">
                             <Grid.ColumnDefinitions><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                             <TextBlock Text="客户编码:" VerticalAlignment="Center"/>
                             <TextBox x:Name="CustomerCodeInput" Grid.Column="1" Style="{StaticResource PlanParameterInputStyle}" MaxLength="100"
+                                     materialDesign:TextFieldAssist.CharacterCounterVisibility="Collapsed"
                                      ToolTip="填写完整客户编码" Text="{Binding CustomerCode, UpdateSourceTrigger=PropertyChanged}"/>
                         </Grid>
                     </WrapPanel>
                 </Grid>
-                <TextBlock x:Name="QueryMessageText" Text="{Binding QueryMessage}" Margin="0,8,0,0" FontSize="12"
-                           Foreground="{StaticResource ImdpMutedTextBrush}" TextWrapping="Wrap"/>
-                <TextBlock Text="{Binding WorkOrderText}" Margin="0,4,0,0" FontSize="12"
-                           Foreground="{StaticResource ImdpMutedTextBrush}" TextWrapping="Wrap"/>
             </StackPanel>
         </Border>
 
@@ -123,12 +121,12 @@
                 Style="{StaticResource ManagementSurfaceStyle}"
                 Visibility="{Binding HasPlan, Converter={StaticResource BooleanToVisibilityConverter}}">
             <Grid>
-                <Grid.RowDefinitions><RowDefinition Height="204"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="172"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <!-- 表头使用结果视口宽度，自动让出纵向滚动条占位，保持每列上下对齐。 -->
                 <Grid x:Name="StationHeader" Width="{Binding ViewportWidth, ElementName=ResultScroll}" HorizontalAlignment="Left">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="36"/><RowDefinition Height="28"/><RowDefinition Height="28"/>
-                        <RowDefinition Height="48"/><RowDefinition Height="32"/><RowDefinition Height="32"/>
+                        <RowDefinition Height="48"/><RowDefinition Height="32"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions><ColumnDefinition Width="40"/><ColumnDefinition Width="120"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                     <Border Background="#E8EDF2" Margin="0,0,2,0">
@@ -153,7 +151,7 @@
                     <Border Grid.Row="4" Grid.Column="1" Background="#F4F9FD" Margin="2,0,2,0" Padding="6,0">
                         <TextBlock Text="扫码编号" VerticalAlignment="Center" FontSize="12"/>
                     </Border>
-                    <ItemsControl x:Name="StationColumns" Grid.Column="2" Grid.RowSpan="6" ItemsSource="{Binding Stations}">
+                    <ItemsControl x:Name="StationColumns" Grid.Column="2" Grid.RowSpan="5" ItemsSource="{Binding Stations}">
                         <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -161,7 +159,7 @@
                                     <Grid>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="36"/><RowDefinition Height="28"/><RowDefinition Height="28"/>
-                                            <RowDefinition Height="48"/><RowDefinition Height="32"/><RowDefinition Height="32"/>
+                                            <RowDefinition Height="48"/><RowDefinition Height="32"/>
                                         </Grid.RowDefinitions>
                                         <Border Background="#E8EDF2" Padding="1,2">
                                             <TextBlock Text="{Binding Number, StringFormat=工位{0}}" ToolTip="{Binding Number, StringFormat=工位{0}}"
@@ -244,12 +242,6 @@
                                                      AutomationProperties.Name="{Binding Number, StringFormat=工位{0}扫码编号}"
                                                      Loaded="ScanInputLoaded" KeyDown="ScanCodeKeyDown"/>
                                         </Border>
-                                        <Button x:Name="ExecuteButton" Grid.Row="5" FontSize="12" Padding="1,0" Margin="0,2,0,0" ToolTip="按当前方案执行本工位" ClipToBounds="True"
-                                                Style="{StaticResource SemanticQueryButtonStyle}"
-                                                Command="{Binding DataContext.ExecuteStationCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                CommandParameter="{Binding}">
-                                            <TextBlock Text="执行" TextTrimming="CharacterEllipsis"/>
-                                        </Button>
                                     </Grid>
                                 </Border>
                             </DataTemplate>

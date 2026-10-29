@@ -1,10 +1,10 @@
 using System.IO;
 using System.Collections.Concurrent;
 using IMDP.Domain.ValueObjects;
-using IMDP.Infrastructure.Protocol;
 using IMDP.Infrastructure.Serial;
 using IMDP.Products.GasDG.AlarmHost.Models;
 using NLog;
+using IMDP.Infrastructure.Protocol.GAS_Protocol.Gas_C5F0;
 
 namespace IMDP.Products.GasDG.AlarmHost.Services;
 
@@ -247,6 +247,8 @@ public sealed class AlarmHostExecutionService(ISerialService serial)
         // 先验证所有目标值，避免后半段参数无法编码时，前半段已经写入设备。
         var targets = items.Where(item => item.CanExecute && AlarmHostFunctionCatalog.Get(item.Code).CanWrite)
             .ToDictionary(item => item.Code, item => AlarmHostExecutionCodec.Encode(item, scanCode, DateTime.Now));
+        var valveItems = items.Where(item => AlarmHostFunctionCatalog.Get(item.Code).ObjectId == 0x0200).ToArray();
+        var valveTarget = AlarmHostExecutionCodec.EncodeValveConfiguration(valveItems);
         // 公共命令类型沿用平台：1写参数、2读参数、3读版本，不用对象编号替代公共命令码。
         ProtocolCommand Command(int type) => commands?.FirstOrDefault(command => command.CommandType == type)
             ?? new ProtocolCommand { CommandType = type };
@@ -256,8 +258,10 @@ public sealed class AlarmHostExecutionService(ISerialService serial)
             if (command.TimeoutMs <= 0 || command.RetryCount < 0 || command.SendDelayMs < 0)
                 throw new ArgumentException("协议命令的超时必须为正数，重发次数和延时不能为负数。", nameof(commands));
         }
+        // 同优先级先聚合同类命令，避免目录顺序调整后拆散通信批次
         var ordered = items.Where(item => item.CanExecute)
-            .OrderBy(item => Command(CommandType(item, planType)).Order).ThenBy(item => item.Order).ToList();
+            .OrderBy(item => Command(CommandType(item, planType)).Order)
+            .ThenBy(item => CommandType(item, planType)).ThenBy(item => item.Order).ToList();
         var production = ordered.FirstOrDefault(item => item.Code == AlarmHostFunctionCatalog.ProductionStatus);
         if (planType == 0 && production != null)
         {
@@ -269,61 +273,212 @@ public sealed class AlarmHostExecutionService(ISerialService serial)
         await InSessionAsync(portName, baudRate, async (buffer, config, sessionToken) =>
         {
             var passed = true;
-            foreach (var item in ordered)
+            void Fail(IEnumerable<AlarmHostResultRow> rows, Exception error, string? phase = null)
             {
+                Logger.Error(error, "报警主机{0}项目执行失败", portName);
+                var message = phase == null ? error.Message : $"{phase}：{error.Message}";
+                foreach (var row in rows) report(new(row.Code, "失败", "", false, message));
+                passed = false;
+            }
+            void ReportValue(IEnumerable<AlarmHostResultRow> rows, byte[] value, byte? writeResult)
+            {
+                foreach (var row in rows)
+                {
+                    AlarmHostItemResult result;
+                    try
+                    {
+                        targets.TryGetValue(row.Code, out var expected);
+                        result = AlarmHostExecutionCodec.Evaluate(row, value, scanCode, DateTime.Now, expected);
+                    }
+                    catch (Exception error) when (error is FormatException or InvalidOperationException or ArgumentException or OverflowException)
+                    {
+                        result = new(row.Code, "失败", "", false, error.Message);
+                    }
+                    if (writeResult is > 0) result = result with { Message = $"写应答结果码：0x{writeResult.Value:X2}, {result.Message}" };
+                    report(result);
+                    passed &= result.IsPass != false;
+                }
+            }
+
+            // 设置的生产态、自检及需要写前读取的对象保留独立步骤；检验普通项统一批读。
+            async Task ExecuteSingleAsync(IGrouping<ushort, AlarmHostResultRow> group)
+            {
+                var groupedItems = group.ToArray();
+                var item = groupedItems[0];
+                var id = group.Key;
                 sessionToken.ThrowIfCancellationRequested();
                 if (planType == 0 && item == production && targets[item.Code][0] == 1 && !passed)
                 {
                     report(new(item.Code, "未执行", "", false, "前序项目未通过，未切换出厂态"));
-                    continue;
+                    return;
                 }
-                var definition = AlarmHostFunctionCatalog.Get(item.Code);
-                var id = definition.ObjectId!.Value;
+                var failurePhase = "读取失败";
                 try
                 {
                     byte? writeResult = null;
-                    if (planType == 0 && definition.CanWrite)
+                    byte[]? writeValue = null;
+                    if (planType == 0 && AlarmHostFunctionCatalog.Get(item.Code).CanWrite)
                     {
+                        writeValue = targets[item.Code];
+                    }
+                    if (writeValue != null) failurePhase = "写前检查失败，尚未发送设置";
+                    async Task<byte[]> ReadAsync() => Protocol.ReadObjectResponse(
+                        await ExchangeAsync(portName, config, buffer, () => Protocol.BuildReadFrame(id),
+                            frame => Protocol.MatchesReadResponse(frame, id), Command(item.Code == AlarmHostFunctionCatalog.Version ? 3 : 2), sessionToken), id);
+                    if (writeValue != null && item.Code is AlarmHostFunctionCatalog.MeterSpecification or AlarmHostFunctionCatalog.PulseResolution)
+                    {
+                        // 规格原表有长度矛盾，001D为旧UGNB设备枚举：先核实设备读布局，再写入。
+                        var current = await ReadAsync();
+                        if (current.Length != writeValue.Length || (item.Code == AlarmHostFunctionCatalog.PulseResolution && current[0] > 1))
+                            throw new FormatException($"{item.Name}的设备格式与已登记UGNB布局不符，未下发设置：{Convert.ToHexString(current)}");
+                    }
+                    if (writeValue != null && item.Code == AlarmHostFunctionCatalog.SettlementFunctions)
+                    {
+                        var current = await ReadAsync();
+                        if (current.Length != 1) throw new FormatException("结算功能字段应为1字节。");
+                        writeValue = [(byte)((current[0] & 0xF8) | writeValue[0])];
+                    }
+                    if (writeValue != null)
+                    {
+                        failurePhase = "写入未确认，未执行回读";
                         // 每次真正发送前取时，排队、前序步骤、发送延时和重发均不使用旧表时。
                         byte[] BuildWrite()
                         {
                             if (item.Code == AlarmHostFunctionCatalog.MeterTime)
-                                targets[item.Code] = AlarmHostExecutionCodec.Encode(item, scanCode, DateTime.Now);
-                            return Protocol.BuildWriteFrame(id, targets[item.Code]);
+                                writeValue = targets[item.Code] = AlarmHostExecutionCodec.Encode(item, scanCode, DateTime.Now);
+                            return Protocol.BuildWriteFrame(id, writeValue);
                         }
+                        var writeCommand = Command(1);
+                        // 自检触发只发一次，普通读超时重试不应用到触发写上。
+                        if (item.Code == AlarmHostFunctionCatalog.CommunicationSelfCheck)
+                            writeCommand = new ProtocolCommand { TimeoutMs = writeCommand.TimeoutMs,
+                                RetryCount = 0, SendDelayMs = writeCommand.SendDelayMs };
                         var response = await ExchangeAsync(portName, config, buffer, BuildWrite,
-                            frame => Protocol.MatchesWriteResponse(frame, id), Command(1), sessionToken);
+                            frame => Protocol.MatchesWriteResponse(frame, id), writeCommand, sessionToken);
                         writeResult = Protocol.ReadWriteResponse(response, id);
+                        failurePhase = "已收到写应答，回读失败";
                         if (writeResult is > 0)
                             Logger.Warn("报警主机{0}项目{1}写结果码0x{2:X2}，继续回读最终值", portName, item.Code, writeResult.Value);
                     }
-                    var read = await ExchangeAsync(portName, config, buffer, () => Protocol.BuildReadFrame(id),
-                        frame => Protocol.MatchesReadResponse(frame, id), Command(item.Code == AlarmHostFunctionCatalog.Version ? 3 : 2), sessionToken);
-                    var value = Protocol.ReadObjectResponse(read, id);
-                    targets.TryGetValue(item.Code, out var expected);
-                    var result = AlarmHostExecutionCodec.Evaluate(item, value, scanCode, DateTime.Now, expected);
-                    if (writeResult is > 0) result = result with { Message = $"写应答结果码：0x{writeResult.Value:X2}, {result.Message}" };
-                    report(result);
-                    passed &= result.IsPass;
-                    if (planType == 0 && item == production && !result.IsPass && targets[item.Code][0] == 0)
-                        break;
+                    var value = await ReadAsync();
+                    if (item.Code == AlarmHostFunctionCatalog.CommunicationSelfCheck)
+                    {
+                        // 沿旧UGNB节拍：FF等待15秒后再读，最多追加两次，任何工位均可取消。
+                        for (var poll = 0; value.Length == 2 && value[1] == 0xFF && poll < 2; poll++)
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(15), sessionToken);
+                            value = await ReadAsync();
+                        }
+                    }
+                    ReportValue(groupedItems, value, writeResult);
                 }
                 catch (OperationCanceledException) { throw; }
-                catch (IOException) { throw; }
+                catch (IOException error) { throw new IOException($"{failurePhase}：{error.Message}", error); }
                 catch (Exception error)
                 {
-                    Logger.Error(error, "报警主机{0}项目{1}执行失败", portName, item.Code);
-                    report(new(item.Code, "失败", "", false, error.Message));
-                    passed = false;
-                    if (planType == 0 && item == production && targets[item.Code][0] == 0) break;
+                    Fail(groupedItems, error, failurePhase);
                 }
             }
+
+            var batch = new List<IGrouping<ushort, AlarmHostResultRow>>();
+            async Task FlushBatchAsync()
+            {
+                if (batch.Count == 0) return;
+                var ids = batch.Select(group => group.Key).ToArray();
+                var byId = batch.ToDictionary(group => group.Key);
+                var failurePhase = "读取失败";
+                try
+                {
+                    IReadOnlyDictionary<ushort, byte?> writeResults = new Dictionary<ushort, byte?>();
+                    var writes = batch.Where(group => planType == 0 && AlarmHostFunctionCatalog.Get(group.First().Code).CanWrite &&
+                        (group.Key != 0x0200 || valveTarget[..8].Any(value => value != 0))).ToArray();
+                    if (writes.Length > 0)
+                    {
+                        failurePhase = "写入未确认，未执行回读";
+                        var writeIds = writes.Select(group => group.Key).ToArray();
+                        Logger.Debug("报警主机{0}批量设置，{1}个对象：{2}", portName, writeIds.Length,
+                            string.Join(",", writeIds.Select(id => $"{id:X4}")));
+                        byte[] BuildWrite()
+                        {
+                            foreach (var group in writes)
+                                if (group.First().Code == AlarmHostFunctionCatalog.MeterTime)
+                                    targets[group.First().Code] = AlarmHostExecutionCodec.Encode(group.First(), scanCode, DateTime.Now);
+                            return Protocol.BuildWriteFrame(writes.Select(group =>
+                                new KeyValuePair<ushort, byte[]>(group.Key, group.Key == 0x0200 ? valveTarget : targets[group.First().Code])).ToArray());
+                        }
+                        var response = await ExchangeAsync(portName, config, buffer, BuildWrite,
+                            frame => Protocol.MatchesWriteResponse(frame, writeIds), Command(1), sessionToken);
+                        writeResults = Protocol.ReadWriteResponses(response, writeIds);
+                        failurePhase = "已收到写应答，回读失败";
+                    }
+                    Logger.Debug("报警主机{0}批量读取，{1}个对象：{2}", portName, ids.Length,
+                        string.Join(",", ids.Select(id => $"{id:X4}")));
+                    var readResponse = await ExchangeAsync(portName, config, buffer, () => Protocol.BuildReadFrame(ids),
+                        frame => Protocol.MatchesReadResponse(frame, ids),
+                        Command(batch.All(group => group.First().Code == AlarmHostFunctionCatalog.Version) ? 3 : 2), sessionToken);
+                    var values = Protocol.ReadObjectsResponse(readResponse, (id, remaining) =>
+                    {
+                        if (!byId.TryGetValue(id, out var group))
+                            throw new FormatException($"批量应答包含非本次对象0x{id:X4}。");
+                        return AlarmHostExecutionCodec.ReadValueLength(group.First().Code, remaining);
+                    });
+                    foreach (var group in batch)
+                    {
+                        if (!values.TryGetValue(group.Key, out var value))
+                            Fail(group, new FormatException($"设备未返回对象0x{group.Key:X4}。"), failurePhase);
+                        else
+                        {
+                            writeResults.TryGetValue(group.Key, out var writeResult);
+                            ReportValue(group, value, writeResult);
+                        }
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (IOException error) { throw new IOException($"{failurePhase}：{error.Message}", error); }
+                catch (Exception error) { Fail(batch.SelectMany(group => group), error, failurePhase); }
+                finally { batch.Clear(); }
+            }
+
+            // 阀控放在批末尾，兼容已登记的18字节完整读回和旧设备10字节值读回。
+            // 版本也是C5F0读对象，不因平台的命令分类3再拆一帧。
+            var groups = ordered.GroupBy(item => AlarmHostFunctionCatalog.Get(item.Code).ObjectId!.Value)
+                .OrderBy(group => planType == 0 && group.First() == production ? (targets[production.Code][0] == 0 ? -1 : 3) :
+                    group.First().Code == AlarmHostFunctionCatalog.CommunicationSelfCheck ? 2 : group.Key == 0x0200 ? 1 : 0);
+            // 加密后连同公共头不超过300字节；只在容量不足或确有独立步骤时分批。
+            var batchLength = 1;
+            foreach (var group in groups)
+            {
+                sessionToken.ThrowIfCancellationRequested();
+                var item = group.First();
+                var separate = item.Code == AlarmHostFunctionCatalog.CommunicationSelfCheck ||
+                    (planType == 0 && (item == production || item.Code is AlarmHostFunctionCatalog.MeterSpecification or
+                        AlarmHostFunctionCatalog.PulseResolution or AlarmHostFunctionCatalog.SettlementFunctions));
+                var writeLength = planType == 0 && targets.TryGetValue(item.Code, out var target) ?
+                    (group.Key == 0x0200 ? valveTarget.Length : target.Length) : 0;
+                var length = 2 + Math.Max(writeLength, AlarmHostExecutionCodec.MaximumReadLength(item.Code));
+                if (batch.Count > 0 && (separate || batchLength + length > 255))
+                {
+                    await FlushBatchAsync();
+                    batchLength = 1;
+                }
+                if (separate)
+                {
+                    await ExecuteSingleAsync(group);
+                    if (planType == 0 && item == production && targets[item.Code][0] == 0 && !passed) break;
+                }
+                else
+                {
+                    batch.Add(group);
+                    batchLength += length;
+                }
+            }
+            await FlushBatchAsync();
             return passed;
         }, cancellationToken);
     }
 
     /// <summary>
-    /// 项目按当前模式的主要命令类别排序；写后回读始终紧随其写入，不拆成独立工位步骤
+    /// 项目按公共命令类别排序；同类普通对象合并，特殊对象保留独立步骤
     /// </summary>
     private static int CommandType(AlarmHostResultRow item, int planType) =>
         planType == 0 && AlarmHostFunctionCatalog.Get(item.Code).CanWrite ? 1 :
@@ -370,7 +525,6 @@ public sealed class AlarmHostExecutionService(ISerialService serial)
             void Receive(object? sender, SerialDataReceivedEventArgs args)
             {
                 if (!string.Equals(args.PortName, portName, StringComparison.OrdinalIgnoreCase)) return;
-                Logger.Debug("报警主机接收 {0}：{1}", portName, BitConverter.ToString(args.Data));
                 buffer.Append(args.Data);
             }
             void StatusChanged(object? sender, SerialPortStatusChangedEventArgs args)
@@ -434,7 +588,7 @@ public sealed class AlarmHostExecutionService(ISerialService serial)
             byte[] request = [.. Enumerable.Repeat((byte)0xFE, PreambleLength), .. frame];
             var transmissionMs = (int)Math.Ceiling(request.Length * bitsPerByte * 1000 / config.BaudRate);
             buffer.Clear();
-            Logger.Debug("报警主机发送 {0}，第{1}次，前导FE×{2}，帧体：{3}", portName, attempt + 1, PreambleLength, BitConverter.ToString(frame));
+            Logger.Debug("报警主机请求 {0}，第{1}次，前导FE×{2}，帧体{3}字节", portName, attempt + 1, PreambleLength, frame.Length);
             try { await serial.SendAsync(portName, request).WaitAsync(cancellationToken); }
             catch (OperationCanceledException) { throw; }
             catch (Exception error) { throw new IOException($"{portName} 串口发送失败：{error.Message}", error); }

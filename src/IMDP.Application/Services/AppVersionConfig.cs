@@ -14,13 +14,13 @@ namespace IMDP.Application.Services;
 public static class AppVersionConfig
 {
     /// <summary>当前应用程序版本号（如 1.0.3）</summary>
-    public const string Version = "1.0.1";
+    public const string Version = "1.0.0";
 
     /// <summary>当前版本更新日志与更新说明</summary>
-    public const string ReleaseNotes = "• 修复了部分bug";
+    public const string ReleaseNotes = "• 初始版本";
 
     /// <summary>当前版本发布时间（格式：yyyy-MM-dd HH:mm:ss 或 yyyyMMdd HHmmss）</summary>
-    public const string ReleaseTime = "2026-08-06 10:30:47";
+    public const string ReleaseTime = "2026-10-27 17:06:06";
 
     /// <summary>
     /// 默认更新包下载相对路径（仅存路径部分，不记录 IP 与端口号）
@@ -29,7 +29,7 @@ public static class AppVersionConfig
     /// 则实际下载地址 = http://192.168.87.94:668/Package/IMDP_V1.0.1.zip。</para>
     /// <para>更换更新服务器时只需修改 appsettings.json，无需改动本常量与重新编译。</para>
     /// </summary>
-    public const string DownloadUrl = "/Package/IMDP_V1.0.1.zip";
+    public const string DownloadUrl = "/Package/IMDP_V1.0.0.zip";
 
     /// <summary>是否为强制更新版本</summary>
     public const bool Mandatory = false;

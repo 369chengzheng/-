@@ -41,7 +41,7 @@
         <!--  登录卡片：玻璃拟态，半透明深蓝渐变融入背景，圆角 24，柔和投影浮起  -->
         <materialDesign:Card
             Width="400"
-            Height="440"
+            Height="490"
             Padding="36,32"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
@@ -178,6 +178,8 @@
                     </Button.Template>
                 </Button>
 
+
+
                 <Button
                     Height="36"
                     Background="Transparent"
@@ -185,6 +187,39 @@
                     BorderThickness="1"
                     Command="{Binding CancelCommand}"
                     Content="取消"
+                    Cursor="Hand"
+                    Foreground="#D9EAF6FF">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border
+                                x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8">
+                                <ContentPresenter
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    RecognizesAccessKey="True" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#14FFFFFF" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
+                </Button>
+
+                <!--  协议测试入口：登录页只做跳转，测试逻辑在插件与协议测试页内  -->
+                <Button
+                    Height="36"
+                    Margin="0,8,0,8"
+                    Background="Transparent"
+                    BorderBrush="#59FFFFFF"
+                    BorderThickness="1"
+                    Command="{Binding OpenProtocolTestCommand}"
+                    Content="协议测试"
                     Cursor="Hand"
                     Foreground="#D9EAF6FF">
                     <Button.Template>

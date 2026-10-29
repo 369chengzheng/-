@@ -48,16 +48,16 @@ public sealed partial class AlarmHostConfigDraft : ObservableObject
     public IReadOnlyDictionary<string, AlarmHostConfigItem> Items { get; }
 
     /// <summary>
-    /// 按功能目录顺序展示无子参数项目，直接复用当前草稿中的可编辑项
+    /// 按功能目录顺序展示仅MES项目，直接复用当前草稿中的可编辑项
     /// </summary>
     public IEnumerable<AlarmHostConfigItem> NoParameterItems => AlarmHostFunctionCatalog.All
-        .Select(definition => Items[definition.Key]).Where(item => item.Values.Count == 0);
+        .Where(definition => !definition.HasVisibleParameters).Select(definition => Items[definition.Key]);
 
     /// <summary>
-    /// 全部有参数项目按显示顺序展示，宽组集中在末尾，编辑模板由页面选择
+    /// 需要展示参数控件的项目按显示顺序排列，宽组集中在末尾
     /// </summary>
     public IEnumerable<AlarmHostConfigItem> ParameterItems => AlarmHostFunctionCatalog.DisplayOrder
-        .Where(definition => definition.Parameters is { Count: > 0 })
+        .Where(definition => definition.HasVisibleParameters)
         .Select(definition => Items[definition.Key]);
 
     /// <summary>

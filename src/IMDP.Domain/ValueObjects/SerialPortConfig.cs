@@ -23,4 +23,13 @@ public class SerialPortConfig
 
     /// <summary>校验位（None/Even/Odd/Mark/Space，默认 None）</summary>
     public string Parity { get; set; } = "None";
+
+    /// <summary>
+    /// DTR 置位（默认 false）。光电头/取电型工装常从 DTR/RTS 取电，
+    /// 不置位时表具可能完全不上电、只回线路毛刺。
+    /// </summary>
+    public bool DtrEnable { get; set; }
+
+    /// <summary>RTS 置位（默认 false）。与 <see cref="DtrEnable"/> 同理，见现场工装取电方式。</summary>
+    public bool RtsEnable { get; set; }
 }

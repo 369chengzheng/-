@@ -1,12 +1,19 @@
 // =============================================================================
 // 文件名：SerialPortWrapper.cs
 // 功能描述：串口包装器（内部类）
-//           对 System.IO.Ports.SerialPort 进行封装，提供后台读取循环、
+//           对 System.IO.Ports.SerialPort 进行封装，提供后台接收线程、
 //           数据缓冲、超时等待数据等能力，并对外暴露数据接收与异常事件。
-//           原始接收字节经 NLog 落盘（logger 名 = 本类全名，nlog.config 按
-//           IMDP.Infrastructure.Serial.* 前缀路由到 serial_日期.txt）。
+//           原始接收字节经 NLog 落盘（logger 名 = 本类全名，与其它日志
+//           统一写入 IMDP日期-1.log）。
+//
+//           接收实现说明（2026-10-26 现场实测后改写）：
+//           原先用 _port.BaseStream.ReadAsync(..., cancellationToken) 异步读，
+//           在实际 USB 转串口上从第一次调用起就抛出
+//           ERROR_OPERATION_ABORTED(995)（“The I/O operation has been aborted…”），
+//           重试退避也永远失败（日志中 6 分钟 2592 次重试、成功接收 0 次）。
+//           现改为“同步阻塞读 + 专用后台线程”：不注册取消回调、不触发 CancelIoEx，
+//           仅在 Close() 时因句柄失效而抛异常退出，行为可预测。
 // =============================================================================
-using System.Buffers;
 using System.IO.Ports;
 using NLog;
 
@@ -14,12 +21,12 @@ namespace IMDP.Infrastructure.Serial;
 
 /// <summary>
 /// 串口包装器（内部类）
-/// <para>封装 <see cref="SerialPort"/>，在后台线程中循环读取数据并触发事件；
+/// <para>封装 <see cref="SerialPort"/>，在专用后台线程中阻塞读取数据并触发事件；
 /// 同时提供 <see cref="WaitForDataAsync"/> 方法支持超时等待响应。</para>
 /// </summary>
 internal class SerialPortWrapper : IDisposable
 {
-    /// <summary>NLog 日志器（原始接收字节记录；logger 名落在 IMDP.Infrastructure.Serial.* 前缀，单独进串口日志）</summary>
+    /// <summary>NLog 日志器（原始接收字节记录；logger 名落在 IMDP.Infrastructure.Serial.* 前缀，与其它日志统一写入同一文件）</summary>
     private static readonly ILogger _logger = LogManager.GetLogger(typeof(SerialPortWrapper).FullName);
 
     private readonly SerialPort _port;
@@ -28,9 +35,13 @@ internal class SerialPortWrapper : IDisposable
     private readonly MemoryStream _buffer = new();
     /// <summary>最大缓冲区大小（字节），超过则清空以避免内存膨胀。</summary>
     private const int MaxBufferSize = 65536;
-    /// <summary>读取被中止（IOException）后的退避重读间隔（毫秒），避免异常风暴占满 CPU。</summary>
+    /// <summary>单次读取的字节上限。</summary>
+    private const int ReadBufferSize = 4096;
+    /// <summary>读取失败后的退避重读间隔（毫秒），避免异常风暴占满 CPU。</summary>
     private const int ReadRetryDelayMs = 100;
-    private Task? _readTask;
+    /// <summary>连续失败时每这么多次才记一条日志，避免刷屏。</summary>
+    private const int FailureLogEvery = 50;
+    private Thread? _readThread;
     private CancellationTokenSource? _readCts;
     private bool _disposed;
 
@@ -56,96 +67,118 @@ internal class SerialPortWrapper : IDisposable
     }
 
     /// <summary>
-    /// 启动后台读取循环（若已在运行则直接返回）。
+    /// 启动后台接收线程（若已在运行则直接返回）。
     /// </summary>
     public void StartReadLoop()
     {
         // 避免重复启动
-        if (_readTask != null && !_readTask.IsCompleted) return;
-        _readCts = CancellationTokenSource.CreateLinkedTokenSource(_cancellationToken);
-        _readTask = Task.Run(ReadLoopAsync, _readCts.Token);
+        if (_readThread is { IsAlive: true }) return;
+        if (_readCts is null || _readCts.IsCancellationRequested)
+        {
+            _readCts?.Dispose();
+            _readCts = CancellationTokenSource.CreateLinkedTokenSource(_cancellationToken);
+        }
+
+        _readThread = new Thread(ReadLoop)
+        {
+            IsBackground = true,
+            Name = $"SerialRead-{_port.PortName}"
+        };
+        _readThread.Start();
+        _logger.Info($"[{_port.PortName}] 后台接收线程已启动（同步阻塞读）");
     }
 
     /// <summary>
-    /// 停止后台读取循环。
+    /// 停止后台接收线程。
+    /// <para>注意：阻塞中的同步读只能靠 <see cref="SerialPort.Close"/> 唤醒，
+    /// 因此调用方应先关闭串口再调本方法（<c>SerialService.CloseAsync</c> 已是该顺序）。</para>
     /// </summary>
     public void StopReadLoop()
     {
         _readCts?.Cancel();
-        _readTask?.Wait(TimeSpan.FromSeconds(1));
+        var thread = _readThread;
+        if (thread is { IsAlive: true } && !thread.Join(TimeSpan.FromSeconds(1)))
+        {
+            _logger.Warn($"[{_port.PortName}] 后台接收线程未能在 1 秒内退出（可能仍阻塞在同步读上）");
+        }
     }
 
     /// <summary>
-    /// 后台读取循环：持续从串口基流读取数据并处理。
-    /// <para>异常在循环内逐次捕获与恢复，保证接收循环永不因单次 I/O 异常静默死亡：
-    /// 在途读被中止（如 USB 串口驱动返回 ERROR_OPERATION_ABORTED）≠ 端口损坏，
-    /// 退避后重新发起读取即可；串口已关闭或取消时正常退出。</para>
+    /// 后台接收循环：以同步阻塞方式读取串口数据。
+    /// <para>为什么不使用 <c>BaseStream.ReadAsync</c>：带 CancellationToken 的串口异步读
+    /// 在部分 USB 转串口驱动上会立刻返回 ERROR_OPERATION_ABORTED(995)，
+    /// 表现为“端口已打开、发送正常，但一个字节都收不到”，且重试无效。</para>
     /// </summary>
-    private async Task ReadLoopAsync()
+    private void ReadLoop()
     {
-        // 从共享数组池租用缓冲区，避免频繁分配
-        var buffer = ArrayPool<byte>.Shared.Rent(1024);
+        var buffer = new byte[ReadBufferSize];
+        int consecutiveFailures = 0;
 
-        try
+        while (!_readCts!.IsCancellationRequested && _port.IsOpen)
         {
-            while (!_readCts!.Token.IsCancellationRequested && _port.IsOpen)
+            int bytesRead;
+            try
             {
-                int bytesRead;
-                try
+                // ReadTimeout 为 InfiniteTimeout：阻塞到至少读到 1 字节；关闭端口时抛异常退出
+                bytesRead = _port.Read(buffer, 0, buffer.Length);
+                if (consecutiveFailures > 0)
                 {
-                    bytesRead = await _port.BaseStream.ReadAsync(buffer, 0, buffer.Length, _readCts.Token);
+                    _logger.Info($"[{_port.PortName}] 串口读取已恢复（此前连续失败 {consecutiveFailures} 次）");
+                    consecutiveFailures = 0;
                 }
-                catch (OperationCanceledException)
+            }
+            catch (TimeoutException)
+            {
+                // ReadTimeout 为无限时的防御分支：直接继续下一轮
+                continue;
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
+            {
+                // 端口已关闭/已取消：正常退出（关闭串口时同步读会以异常形式返回）
+                if (!_port.IsOpen || _readCts!.IsCancellationRequested)
                 {
-                    // 正常停止：关闭串口/停止读循环时取消令牌，退出循环
                     break;
                 }
-                catch (TimeoutException)
-                {
-                    // 读超时（当前配置为无限超时，防御性保留）：直接继续下一轮读取
-                    continue;
-                }
-                catch (IOException ex)
-                {
-                    // 在途读被中止（ERROR_OPERATION_ABORTED 等）：串口仍打开时退避后重读。
-                    // 若无此恢复逻辑，一次该异常就会永久终止接收循环，表现为
-                    // "发送正常但永远收不到数据"（历史上正是该缺陷导致工装应答全部丢失）。
-                    if (!_port.IsOpen)
-                    {
-                        break;
-                    }
 
-                    _logger.Warn(ex, $"[{_port.PortName}] 串口读取被中止，退避 {ReadRetryDelayMs}ms 后重读：{ex.Message}");
-                    try
-                    {
-                        await Task.Delay(ReadRetryDelayMs, _readCts.Token);
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        // 退避期间被停止（关闭串口/停止读循环）：安静退出
-                        break;
-                    }
-
-                    continue;
+                consecutiveFailures++;
+                if (consecutiveFailures == 1 || consecutiveFailures % FailureLogEvery == 0)
+                {
+                    _logger.Warn($"[{_port.PortName}] 串口读取失败（连续 {consecutiveFailures} 次），" +
+                                 $"退避 {ReadRetryDelayMs}ms 后重读：{ex.Message}");
                 }
 
-                if (bytesRead > 0)
+                if (_readCts!.IsCancellationRequested) break;
+                try
+                {
+                    Thread.Sleep(ReadRetryDelayMs);
+                }
+                catch (ThreadInterruptedException)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            if (bytesRead > 0)
+            {
+                try
                 {
                     ProcessReceivedData(buffer, bytesRead);
                 }
+                catch (Exception ex)
+                {
+                    // 下游订阅者异常绝不能杀死接收线程，否则又会回到“永远收不到数据”
+                    _logger.Warn(ex, $"[{_port.PortName}] 处理接收数据时下游抛出异常：{ex.Message}");
+                }
             }
         }
-        catch (Exception ex)
-        {
-            // 循环整体异常（如关闭过程中的句柄失效）：记录后触发异常事件，交由上层处理（如自动重连）
-            _logger.Warn(ex, $"[{_port.PortName}] 串口后台读取循环异常退出：{ex.Message}");
-            ErrorOccurred?.Invoke(this, ex);
-        }
-        finally
-        {
-            // 归还租用的缓冲区
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
+
+        _logger.Info($"[{_port.PortName}] 后台接收线程已退出");
     }
 
     /// <summary>
@@ -221,14 +254,15 @@ internal class SerialPortWrapper : IDisposable
     }
 
     /// <summary>
-    /// 释放资源：停止读取循环并清理缓冲区。
+    /// 释放资源：停止接收线程并清理缓冲区。
     /// </summary>
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
-        _readCts?.Cancel();
-        _readTask?.Wait(TimeSpan.FromSeconds(1));
+        StopReadLoop();
+        _readCts?.Dispose();
+        _readCts = null;
         _buffer.Dispose();
     }
 }

@@ -41,6 +41,32 @@
         <converters:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
         <converters:FunctionModuleTypeDisplayConverter x:Key="FunctionModuleTypeDisplayConverter" />
 
+        <!-- 首页采用参考图的标题及白色状态栏；其他页面沿用现有外壳样式。 -->
+        <Style x:Key="ShellTitleTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Content.Tag, ElementName=MainContentHost}" Value="Home">
+                    <Setter Property="FontSize" Value="24" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="ShellVersionTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Content.Tag, ElementName=MainContentHost}" Value="Home">
+                    <Setter Property="FontSize" Value="22" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="ShellStatusTextStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="White" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Content.Tag, ElementName=MainContentHost}" Value="Home">
+                    <Setter Property="Foreground" Value="{StaticResource ImdpMutedTextBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
         <!--  深蓝标题栏中的窗口操作按钮  -->
         <Style x:Key="ShellCaptionButtonStyle"
                TargetType="Button"
@@ -110,10 +136,20 @@
                 <!--  顶部标题栏（按住左键可拖动移动窗口，双击最大化/还原）  -->
                 <Grid
                     x:Name="TitleBar"
-                    Height="56"
-                    Background="{StaticResource ImdpShellBrush}"
                     DockPanel.Dock="Top"
                     MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Height" Value="56" />
+                            <Setter Property="Background" Value="{StaticResource ImdpShellBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Content.Tag, ElementName=MainContentHost}" Value="Home">
+                                    <Setter Property="Height" Value="80" />
+                                    <Setter Property="Background" Value="#0C3076" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
@@ -135,14 +171,14 @@
                         Orientation="Horizontal">
                         <TextBlock
                             VerticalAlignment="Center"
-                            FontSize="18"
+                            Style="{StaticResource ShellTitleTextStyle}"
                             FontWeight="Bold"
                             Foreground="White"
                             Text="智造检测平台" />
                         <TextBlock
                             Margin="14,0,0,0"
                             VerticalAlignment="Center"
-                            FontSize="13"
+                            Style="{StaticResource ShellVersionTextStyle}"
                             Foreground="White"
                             Opacity="0.9"
                             Text="{Binding AppVersion}" />
@@ -169,10 +205,21 @@
 
                 <!--  底部状态栏  -->
                 <Grid
-                    Height="40"
                     VerticalAlignment="Bottom"
-                    Background="{StaticResource ImdpShellBrush}"
                     DockPanel.Dock="Bottom">
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Height" Value="40" />
+                            <Setter Property="Background" Value="{StaticResource ImdpShellBrush}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Content.Tag, ElementName=MainContentHost}" Value="Home">
+                                    <Setter Property="Height" Value="58" />
+                                    <Setter Property="Margin" Value="10,0,10,0" />
+                                    <Setter Property="Background" Value="White" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -184,45 +231,45 @@
                         Orientation="Horizontal">
                         <TextBlock
                             FontSize="12"
-                            Foreground="White"
+                            Style="{StaticResource ShellStatusTextStyle}"
                             Opacity="0.82"
                             Text="工位：" />
                         <TextBlock
                             Margin="4,0,14,0"
                             FontSize="12"
-                            Foreground="White"
+                            Style="{StaticResource ShellStatusTextStyle}"
                             Text="{Binding Station}" />
                         <TextBlock
                             Margin="0,0,14,0"
                             FontSize="12"
-                            Foreground="White"
+                            Style="{StaticResource ShellStatusTextStyle}"
                             Opacity="0.5"
                             Text="|" />
                         <TextBlock
                             FontSize="12"
-                            Foreground="White"
+                            Style="{StaticResource ShellStatusTextStyle}"
                             Opacity="0.82"
                             Text="工号：" />
                         <TextBlock
                             Margin="4,0,14,0"
                             FontSize="12"
-                            Foreground="White"
+                            Style="{StaticResource ShellStatusTextStyle}"
                             Text="{Binding WorkNumber}" />
                         <TextBlock
                             Margin="0,0,14,0"
                             FontSize="12"
-                            Foreground="White"
+                            Style="{StaticResource ShellStatusTextStyle}"
                             Opacity="0.5"
                             Text="|" />
                         <TextBlock
                             FontSize="12"
-                            Foreground="White"
+                            Style="{StaticResource ShellStatusTextStyle}"
                             Opacity="0.82"
                             Text="登录时间：" />
                         <TextBlock
                             Margin="4,0,16,0"
                             FontSize="12"
-                            Foreground="White"
+                            Style="{StaticResource ShellStatusTextStyle}"
                             Text="{Binding LoginTime}" />
                     </StackPanel>
                     <Button
@@ -238,7 +285,7 @@
                 </Grid>
 
                 <!--  主内容区  -->
-                <ContentControl Background="{StaticResource ImdpPageBackgroundBrush}"
+                <ContentControl x:Name="MainContentHost" Background="{StaticResource ImdpPageBackgroundBrush}"
                                 prism:RegionManager.RegionName="MainContentRegion" />
             </DockPanel>
 
@@ -375,9 +422,19 @@
                 x:Name="MenuButtonPlaceholder"
                 Width="0"
                 Height="0"
-                Margin="52,56,0,0"
                 HorizontalAlignment="Left"
-                VerticalAlignment="Top" />
+                VerticalAlignment="Top">
+                <FrameworkElement.Style>
+                    <Style TargetType="FrameworkElement">
+                        <Setter Property="Margin" Value="52,56,0,0" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Content.Tag, ElementName=MainContentHost}" Value="Home">
+                                <Setter Property="Margin" Value="52,80,0,0" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </FrameworkElement.Style>
+            </FrameworkElement>
         </Grid>
     </Border>
 </Window>

@@ -102,6 +102,7 @@ public partial class App : PrismApplication
         // ===== 导航视图注册（View + ViewModel 配对，用于 Prism 区域导航） =====
         containerRegistry.RegisterForNavigation<MainView, MainViewModel>();                                  // 主视图
         containerRegistry.RegisterForNavigation<LoginView, LoginViewModel>();                                // 登录视图
+        containerRegistry.RegisterForNavigation<ProtocolTestView, ProtocolTestViewModel>();                  // 协议测试视图（登录页跳转）
         containerRegistry.RegisterForNavigation<UserManageView, UserManageViewModel>();                      // 用户管理视图
         containerRegistry.RegisterForNavigation<MaterialProductMapView, MaterialProductMapViewModel>();      // 物料-产品映射视图
         containerRegistry.RegisterForNavigation<BoardConfigHistoryView, BoardConfigHistoryViewModel>();      // 板卡配置历史视图
@@ -229,8 +230,6 @@ public partial class App : PrismApplication
             await CheckForUpdateAsync(showWhenNoUpdate: false);
         }
 
-        // 公共协议工具类自测（仅 DEBUG 编译；延迟 5 秒后台执行，结果写 NLog，不弹窗不阻塞）
-        _ = CommonServiceSelfTest.RunAfterStartupAsync();
     }
 
     /// <summary>

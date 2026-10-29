@@ -236,11 +236,6 @@ public sealed class AlarmHostViewModel : AlarmHostPageViewModel
     public string TogglePortsText => _executor.IsConnectionOpen ? "关闭串口" : "打开串口";
 
     /// <summary>
-    /// 当前导航的工单与MES资源，仅显示已生效快照
-    /// </summary>
-    public string WorkOrderText => $"工单：{(_orderNumber.Length == 0 ? "手动物料" : _orderNumber)}    资源编码：{_resourceCode}    MES未接入";
-
-    /// <summary>
     /// 是否有工位执行中，只限制重新查询和串口刷新，不冻结其他工位输入
     /// </summary>
     public bool IsExecuting => _executions.Count > 0 || _stations.Any(station => station.IsRunning);
@@ -390,7 +385,6 @@ public sealed class AlarmHostViewModel : AlarmHostPageViewModel
         _orderNumber = navigationContext.Parameters.GetValue<string>("OrderNumber")?.Trim() ?? "";
         _resourceCode = navigationContext.Parameters.GetValue<string>("ResourceCode")?.Trim() ?? "";
         _operatorWorkNumber = navigationContext.Parameters.GetValue<string>("OperatorWorkNumber")?.Trim() ?? "";
-        OnPropertyChanged(nameof(WorkOrderText));
         _executor.PortStatusChanged -= PortStatusChanged;
         _executor.PortStatusChanged += PortStatusChanged;
         if (previousMaterial != MaterialNumber) _planVisibility.Clear();
@@ -741,10 +735,17 @@ public sealed class AlarmHostViewModel : AlarmHostPageViewModel
                 if (IsCurrent()) rows.Single(row => row.Code == result.Code).Cells[index].Apply(result);
             }, cancellation.Token, _commands);
             if (!IsCurrent()) return;
-            foreach (var row in executableRows.Where(row => row.Cells[index].IsPass == null))
+            foreach (var row in executableRows.Where(row => !row.Cells[index].HasResult))
                 row.Cells[index].Apply(new(row.Code, "未执行", "", false, "前序步骤未通过"));
-            var devicePassed = executableRows.All(row => row.Cells[index].IsPass == true);
+            var judged = executableRows.Where(row => row.Cells[index].IsPass.HasValue).ToArray();
             station.StopTiming();
+            if (judged.Length == 0)
+            {
+                // 只有现场读取展示项时不制造合格/不合格记录，公共记录的bool结果仍沿原契约。
+                station.SetExecutionStatus("读取完成，未作合格判定");
+                return;
+            }
+            var devicePassed = judged.All(row => row.Cells[index].IsPass == true);
             if (devicePassed) PassedCount++;
             else FailedCount++;
             var record = new TestRecordDto
@@ -752,7 +753,7 @@ public sealed class AlarmHostViewModel : AlarmHostPageViewModel
                 Category = ProductCategory.GasDG, TestType = plan.PlanType,
                 MaterialNumber = plan.MaterialNumber, ProductCode = plan.ProductCode,
                 CustomerCode = plan.CustomerCode, OrderNumber = order, ProductSn = scanCode,
-                CreatedBy = workNumber, CreatedTime = started, TestResult = devicePassed,
+                CreatedBy = workNumber, TestResult = devicePassed,
                 TestContentJson = JsonSerializer.Serialize(new
                 {
                     ExecutionId = Guid.NewGuid(), ProductKey,
@@ -771,13 +772,13 @@ public sealed class AlarmHostViewModel : AlarmHostPageViewModel
         }
         catch (OperationCanceledException)
         {
-            foreach (var row in executableRows.Where(row => row.Cells[index].IsPass == null)) row.Cells[index].Clear();
+            foreach (var row in executableRows.Where(row => !row.Cells[index].HasResult)) row.Cells[index].Clear();
             station.SetExecutionStatus("已取消");
         }
         catch (IOException error)
         {
             if (!IsCurrent()) return;
-            foreach (var row in executableRows.Where(row => row.Cells[index].IsPass == null)) row.Cells[index].Interrupt(error.Message);
+            foreach (var row in executableRows.Where(row => !row.Cells[index].HasResult)) row.Cells[index].Interrupt(error.Message);
             station.IsPass = null;
             station.SetExecutionStatus("通信中止");
             _messages.GrowlWarning($"工位{station.Number}通信中止：{error.Message}");
@@ -786,7 +787,7 @@ public sealed class AlarmHostViewModel : AlarmHostPageViewModel
         {
             Logger.Error(error, "报警主机工位{0}执行失败", station.Number);
             if (!IsCurrent()) return;
-            foreach (var row in executableRows.Where(row => row.Cells[index].IsPass == null))
+            foreach (var row in executableRows.Where(row => !row.Cells[index].HasResult))
                 row.Cells[index].Apply(new(row.Code, "未完成", "", false, error.Message));
             station.IsPass = false;
             station.SetExecutionStatus("执行失败");

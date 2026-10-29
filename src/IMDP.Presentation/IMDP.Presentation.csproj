@@ -11,6 +11,8 @@
     <UseWPF>true</UseWPF>
     <ApplicationIcon />
     <StartupObject />
+	<OutputPath>..\..\OUT\</OutputPath>
+	<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +30,7 @@
     <ProjectReference Include="..\IMDP.Domain\IMDP.Domain.csproj" />
     <ProjectReference Include="..\IMDP.Application\IMDP.Application.csproj" />
     <ProjectReference Include="..\IMDP.Infrastructure\IMDP.Infrastructure.csproj" />
+    <ProjectReference Include="..\IMDP.Base\IMDP.Base.csproj" />
     <ProjectReference Include="..\Products\GasDG\IMDP.Products.GasDG.WholeA\IMDP.Products.GasDG.WholeA.csproj">
       <Private>true</Private>
     </ProjectReference>
@@ -53,6 +56,8 @@
 
   <ItemGroup>
     <Resource Include="Assets\LoginBackground.jpg" />
+    <Resource Include="Assets\HomeGasNetwork.jpg" />
+    <Resource Include="Assets\HomeCooperation.jpg" />
   </ItemGroup>
 
   <ItemGroup>

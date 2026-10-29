@@ -51,6 +51,8 @@ public partial class LoginViewModel : ObservableObject, INavigationAware
     public IRelayCommand LoginCommand { get; }
     /// <summary>取消命令（退出应用程序）</summary>
     public IRelayCommand CancelCommand { get; }
+    /// <summary>打开协议测试页命令（登录页只负责跳转，协议测试逻辑在插件与测试页内）</summary>
+    public IRelayCommand OpenProtocolTestCommand { get; }
 
     /// <summary>
     /// 构造函数
@@ -71,6 +73,7 @@ public partial class LoginViewModel : ObservableObject, INavigationAware
 
         LoginCommand = new RelayCommand(OnLogin);
         CancelCommand = new RelayCommand(OnCancel);
+        OpenProtocolTestCommand = new RelayCommand(OnOpenProtocolTest);
     }
 
     /// <summary>
@@ -149,6 +152,14 @@ public partial class LoginViewModel : ObservableObject, INavigationAware
             _messageService.ShowError($"登录失败: {ex.Message}");
         }
     }
+
+    /// <summary>
+    /// 打开协议测试页：登录页只做跳转。
+    /// <para>0xD0/0x01/0x08 等协议测试的组帧、收发与报告全部在自定义插件
+    /// （<c>SecondGenMeterPlugin</c>）与测试页内，登录页不持有协议细节。</para>
+    /// </summary>
+    private void OnOpenProtocolTest()
+        => _regionManager.RequestNavigate("MainContentRegion", "ProtocolTestView");
 
     /// <summary>
     /// 取消处理：直接退出应用程序

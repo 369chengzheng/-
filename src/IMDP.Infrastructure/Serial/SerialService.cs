@@ -3,8 +3,8 @@
 // 功能描述：串口服务实现
 //           实现 ISerialService 接口，提供多串口并发管理、命令队列与重试、
 //           自动重连、USB 端口热插拔监视等完整能力，并通过事件对外通知状态变更。
-//           收发字节经 NLog 落盘（logger 名 = 本类全名，nlog.config 按
-//           IMDP.Infrastructure.Serial.* 前缀路由到 serial_日期.txt）。
+//           收发字节经 NLog 落盘（logger 名 = 本类全名，与其它日志
+//           统一写入 IMDP日期-1.log）。
 // =============================================================================
 using System.Collections.Concurrent;
 using System.IO.Ports;
@@ -22,7 +22,7 @@ namespace IMDP.Infrastructure.Serial;
 /// </summary>
 public class SerialService : ISerialService
 {
-    /// <summary>NLog 日志器（串口收发与状态记录；logger 名落在 IMDP.Infrastructure.Serial.* 前缀，单独进串口日志）</summary>
+    /// <summary>NLog 日志器（串口收发与状态记录；logger 名落在 IMDP.Infrastructure.Serial.* 前缀，与其它日志统一写入同一文件）</summary>
     private static readonly ILogger _logger = LogManager.GetLogger(typeof(SerialService).FullName);
 
     /// <summary>已打开的串口包装器字典（按串口名索引）。</summary>
@@ -96,19 +96,36 @@ public class SerialService : ISerialService
 
         var port = new SerialPort(portName, config.BaudRate, parity, config.DataBits, stopBits)
         {
-            // 读超时必须为无限：本串口的唯一读方是包装器的后台异步读循环（ReadAsync
-            // 内部会把超时临时改为无限再恢复，该 SetCommTimeouts 往返在部分 USB 串口
-            // 驱动上会中止在途读并抛 ERROR_OPERATION_ABORTED，杀死接收循环）；
+            // 读超时必须为无限：本串口的唯一读方是包装器的后台接收线程，
+            // 以同步阻塞读方式等待数据；有限超时会让 SerialStream 每次读都做
+            // SetCommTimeouts 往返，该操作会中止在途读（ERROR_OPERATION_ABORTED）。
             // 应用层等待一律走 DataReceived 事件，不受此超时影响。写超时保留有限值。
             ReadTimeout = SerialPort.InfiniteTimeout,
-            WriteTimeout = 500,
-            DtrEnable = false,
-            RtsEnable = false
+            WriteTimeout = 500
         };
 
         try
         {
-            await Task.Run(() => port.Open());
+            // 打开异常在 Task 内部捕获后重新抛出：避免异常跨 Task 边界时被调试器误判为“用户未处理”
+            Exception? openError = null;
+            await Task.Run(() =>
+            {
+                try
+                {
+                    // DTR/RTS 放在 Open 之前、且与 Open 同一个 try 里：
+                    // ① 取电型光电头需要在打开前就置位；② 个别驱动不支持置位时，
+                    // 异常被收敛成“打开失败”，不会跨 Task 边界变成未处理异常。
+                    port.DtrEnable = config.DtrEnable;
+                    port.RtsEnable = config.RtsEnable;
+                    port.Open();
+                }
+                catch (Exception ex) { openError = ex; }
+            });
+            if (openError is not null)
+                throw openError;
+
+            // 丢弃打开瞬间的线路毛刺（常见是 1 字节 0x00），避免被当成表具应答证据
+            try { port.DiscardInBuffer(); } catch { /* 个别驱动不支持，忽略即可 */ }
 
             // 创建包装器并订阅事件
             var wrapper = new SerialPortWrapper(port, _disposeCts.Token);
@@ -119,14 +136,19 @@ public class SerialService : ISerialService
             _commandQueues[portName] = new ConcurrentQueue<CommandRequest>();
             wrapper.StartReadLoop();
 
-            _logger.Info($"[{portName}] 串口已打开：波特率={config.BaudRate}，数据位={config.DataBits}，停止位={stopBits}，校验位={parity}");
+            _logger.Info($"[{portName}] 串口已打开：波特率={config.BaudRate}，数据位={config.DataBits}，" +
+                         $"停止位={stopBits}，校验位={parity}，DTR={config.DtrEnable}，RTS={config.RtsEnable}");
             OnPortStatusChanged(portName, SerialPortStatus.Opened, "串口已打开");
             return true;
         }
         catch (Exception ex)
         {
             port.Dispose();
-            OnPortStatusChanged(portName, SerialPortStatus.Closed, $"打开失败: {ex.Message}", ex);
+            // 串口被其他程序占用时 Windows 表现为拒绝访问，给出明确可操作的提示
+            string reason = ex is UnauthorizedAccessException
+                ? $"串口 {portName} 被其他程序占用或无访问权限，请关闭占用该串口的程序后重试"
+                : ex.Message;
+            OnPortStatusChanged(portName, SerialPortStatus.Closed, $"打开失败: {reason}", ex);
             return false;
         }
     }
@@ -145,10 +167,34 @@ public class SerialService : ISerialService
             var port = wrapper.Port;
             if (port.IsOpen)
             {
-                // 关闭前复位 DTR/RTS 信号
-                port.DtrEnable = false;
-                port.RtsEnable = false;
-                await Task.Run(() => port.Close());
+                // 关闭前复位 DTR/RTS 信号（个别驱动在端口异常时置位会抛异常，忽略即可）
+                try
+                {
+                    port.DtrEnable = false;
+                    port.RtsEnable = false;
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn($"[{portName}] 关闭前复位 DTR/RTS 失败：{ex.Message}");
+                }
+
+                // Close 会通过 CancelIoEx 唤醒阻塞中的同步读；个别驱动可能不响应，
+                // 加 2 秒上限，避免界面被一次关闭动作卡死。
+                var closeTask = Task.Run(() =>
+                {
+                    try
+                    {
+                        port.Close();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warn($"[{portName}] 关闭串口时抛出异常：{ex.Message}");
+                    }
+                });
+                if (await Task.WhenAny(closeTask, Task.Delay(2000)) != closeTask)
+                {
+                    _logger.Warn($"[{portName}] 串口关闭超时（2 秒未返回），继续清理包装器");
+                }
             }
 
             wrapper.StopReadLoop();

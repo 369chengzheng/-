@@ -5,18 +5,18 @@
     生成工位卡片；扫码触发自动测试 → 全部配置项只读结果展示 →
     人工测试项（LED/蜂鸣器/按键）→ 综合判定。
     分层卡片式布局（与 LaserDetectorConfigView 配置界面同风格）：
-      Row0 面包屑导航：首页 > 物料编码(CurrentMaterialNumber，为空自动隐藏) > 当前页面名；
-      Row1 操作条：左侧产品编码输入框（回车/空格/失焦加载方案），
-                   右侧串口打开/关闭按钮 + 配置面板折叠/展开箭头；
-      Row2 配置预览面板：无 GroupBox 分区，统一 WrapPanel 陈列（只读、仅显示已启用项），
-                   每项一个固定宽度(420)横向 StackPanel = 配置名 + MES代码框 + 可选参数区，
-                   按输入控件数量由多到少排序：范围型(3输入) > 下拉型/值型(2输入)
-                   > 状态型(1输入)，未启用项整项收起不占位；
-                   工位数量、最大测试时间作为全局项（只读）固定排在配置项最后方；
-      Row3 工位检测区：表格化布局（表头行 + 统一结果表格）。
-                   表头行仅显示工位号；串口选择下拉位于结果表格
-                   第 1 行「红外串口」各工位单元格内（单工位共用一个串口，
-                   全部绑定 ViewModel 同一 SelectedPort）。
+    Row0 面包屑导航：首页 > 物料编码(CurrentMaterialNumber，为空自动隐藏) > 当前页面名；
+    Row1 操作条：左侧产品编码输入框（回车/空格/失焦加载方案），
+    右侧串口打开/关闭按钮 + 配置面板折叠/展开箭头；
+    Row2 配置预览面板：无 GroupBox 分区，统一 WrapPanel 陈列（只读、仅显示已启用项），
+    每项一个固定宽度(420)横向 StackPanel = 配置名 + MES代码框 + 可选参数区，
+    按输入控件数量由多到少排序：范围型(3输入) > 下拉型/值型(2输入)
+    > 状态型(1输入)，未启用项整项收起不占位；
+    工位数量、最大测试时间作为全局项（只读）固定排在配置项最后方；
+    Row3 工位检测区：表格化布局（表头行 + 统一结果表格）。
+    表头行仅显示工位号；串口选择下拉位于结果表格
+    第 1 行「红外串口」各工位单元格内（单工位共用一个串口，
+    全部绑定 ViewModel 同一 SelectedPort）。
     保留 Ctrl+鼠标滚轮整体缩放（0.5~3.0）与配置面板折叠/展开交互。
     =============================================================================
 -->
@@ -27,6 +27,7 @@
     xmlns:behaviors="clr-namespace:IMDP.Products.GasDG.LaserDetector.Views.Behaviors"
     xmlns:converters="clr-namespace:IMDP.Products.GasDG.LaserDetector.Views.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
     xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:models="clr-namespace:IMDP.Products.GasDG.LaserDetector.Models"
@@ -103,12 +104,15 @@
             Style="{StaticResource ManagementSurfaceStyle}">
             <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!--  左：产品编码（回车/空格（KeyBinding）与失焦（附加行为）均触发加载方案）；
-                      工位数量、最大测试时间已移至下方配置预览面板最后方  -->
+                <!--
+                    左：产品编码（回车/空格（KeyBinding）与失焦（附加行为）均触发加载方案）；
+                    工位数量、最大测试时间已移至下方配置预览面板最后方
+                -->
                 <StackPanel
                     Grid.Column="0"
                     VerticalAlignment="Center"
@@ -125,12 +129,52 @@
                     </TextBox>
                 </StackPanel>
 
-                <!--  右：串口打开/关闭按钮 + 配置面板折叠/展开箭头
-                      （串口选择下拉已移至下方结果表格第 1 行「红外串口」
-                        各工位单元格内，单工位共用一个串口，
-                        全部绑定 ViewModel 同一 SelectedPort）  -->
+                <!--
+                    中：生产统计（本期软件启动后累计；合格/不合格含 MES 失败强制判不合格）；
+                    独占中间弹性列水平居中，大号加粗字体便于产线远距读数
+                -->
                 <StackPanel
                     Grid.Column="1"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal">
+                    <TextBlock
+                        Margin="0,0,14,0"
+                        VerticalAlignment="Center"
+                        FontSize="20"
+                        FontWeight="Bold"
+                        Text="{Binding TotalProducedCount, StringFormat=累计 {0}}"
+                        Visibility="Collapsed" />
+                    <TextBlock
+                        Margin="0,0,80,0"
+                        VerticalAlignment="Center"
+                        FontSize="20"
+                        FontWeight="Bold"
+                        Foreground="#2E7D32"
+                        Text="{Binding QualifiedCount, StringFormat=合格 {0}}" />
+                    <TextBlock
+                        Margin="0,0,14,0"
+                        VerticalAlignment="Center"
+                        FontSize="20"
+                        FontWeight="Bold"
+                        Foreground="#C62828"
+                        Text="{Binding UnqualifiedCount, StringFormat=不合格 {0}}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="20"
+                        FontWeight="Bold"
+                        Text="{Binding PassRateDisplay, StringFormat=合格率 {0}}"
+                        Visibility="Collapsed" />
+                </StackPanel>
+
+                <!--
+                    右：串口打开/关闭按钮 + 配置面板折叠/展开箭头
+                    （串口选择下拉已移至下方结果表格第 1 行「红外串口」
+                    各工位单元格内，单工位共用一个串口，
+                    全部绑定 ViewModel 同一 SelectedPort）
+                -->
+                <StackPanel
+                    Grid.Column="2"
                     VerticalAlignment="Center"
                     Orientation="Horizontal">
                     <Button
@@ -149,6 +193,16 @@
                         Content="关闭串口"
                         IsEnabled="{Binding IsSerialOpen}"
                         Style="{StaticResource SemanticDangerButtonStyle}" />
+                    <!--  结束工单：确认后关串口并通知宿主清除生效物料、返回首页（不调 MES 结单/不退出登录）  -->
+                    <Button
+                        Width="110"
+                        Height="40"
+                        Margin="5,0"
+                        Command="{Binding EndWorkOrderCommand}"
+                        Content="结束工单"
+                        Style="{StaticResource SemanticButtonBaseStyle}"
+                        Background="#FFF1F0"
+                        Foreground="#D13A35" />
                     <!--  配置面板折叠（上箭头）：收起常态化配置预览面板  -->
                     <Button
                         x:Name="ButtonCloseMenu"
@@ -260,24 +314,24 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[0].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[0].MesCode, Mode=OneWay}" />
                             <TextBox
                                 Width="60"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="下限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[0].LowerLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="下限" />
+                                Text="{Binding Config.Items[0].LowerLimit, Mode=OneWay}" />
                             <TextBlock Margin="0,0,4,0" Text="~" />
                             <TextBox
                                 Width="60"
+                                materialDesign:HintAssist.Hint="上限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[0].UpperLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="上限" />
+                                Text="{Binding Config.Items[0].UpperLimit, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -294,24 +348,24 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[1].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[1].MesCode, Mode=OneWay}" />
                             <TextBox
                                 Width="60"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="下限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[1].LowerLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="下限" />
+                                Text="{Binding Config.Items[1].LowerLimit, Mode=OneWay}" />
                             <TextBlock Margin="0,0,4,0" Text="~" />
                             <TextBox
                                 Width="60"
+                                materialDesign:HintAssist.Hint="上限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[1].UpperLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="上限" />
+                                Text="{Binding Config.Items[1].UpperLimit, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -328,24 +382,24 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[2].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[2].MesCode, Mode=OneWay}" />
                             <TextBox
                                 Width="60"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="下限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[2].LowerLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="下限" />
+                                Text="{Binding Config.Items[2].LowerLimit, Mode=OneWay}" />
                             <TextBlock Margin="0,0,4,0" Text="~" />
                             <TextBox
                                 Width="60"
+                                materialDesign:HintAssist.Hint="上限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[2].UpperLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="上限" />
+                                Text="{Binding Config.Items[2].UpperLimit, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -362,24 +416,24 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[3].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[3].MesCode, Mode=OneWay}" />
                             <TextBox
                                 Width="60"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="下限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[3].LowerLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="下限" />
+                                Text="{Binding Config.Items[3].LowerLimit, Mode=OneWay}" />
                             <TextBlock Margin="0,0,4,0" Text="~" />
                             <TextBox
                                 Width="60"
+                                materialDesign:HintAssist.Hint="上限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[3].UpperLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="上限" />
+                                Text="{Binding Config.Items[3].UpperLimit, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -396,24 +450,24 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[4].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[4].MesCode, Mode=OneWay}" />
                             <TextBox
                                 Width="60"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="下限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[4].LowerLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="下限" />
+                                Text="{Binding Config.Items[4].LowerLimit, Mode=OneWay}" />
                             <TextBlock Margin="0,0,4,0" Text="~" />
                             <TextBox
                                 Width="60"
+                                materialDesign:HintAssist.Hint="上限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[4].UpperLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="上限" />
+                                Text="{Binding Config.Items[4].UpperLimit, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -430,24 +484,24 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[5].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[5].MesCode, Mode=OneWay}" />
                             <TextBox
                                 Width="60"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="下限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[5].LowerLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="下限" />
+                                Text="{Binding Config.Items[5].LowerLimit, Mode=OneWay}" />
                             <TextBlock Margin="0,0,4,0" Text="~" />
                             <TextBox
                                 Width="60"
+                                materialDesign:HintAssist.Hint="上限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[5].UpperLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="上限" />
+                                Text="{Binding Config.Items[5].UpperLimit, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -464,24 +518,24 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[6].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[6].MesCode, Mode=OneWay}" />
                             <TextBox
                                 Width="60"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="下限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[6].LowerLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="下限" />
+                                Text="{Binding Config.Items[6].LowerLimit, Mode=OneWay}" />
                             <TextBlock Margin="0,0,4,0" Text="~" />
                             <TextBox
                                 Width="60"
+                                materialDesign:HintAssist.Hint="上限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[6].UpperLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="上限" />
+                                Text="{Binding Config.Items[6].UpperLimit, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -498,24 +552,24 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[7].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[7].MesCode, Mode=OneWay}" />
                             <TextBox
                                 Width="60"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="下限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[7].LowerLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="下限" />
+                                Text="{Binding Config.Items[7].LowerLimit, Mode=OneWay}" />
                             <TextBlock Margin="0,0,4,0" Text="~" />
                             <TextBox
                                 Width="60"
+                                materialDesign:HintAssist.Hint="上限"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[7].UpperLimit, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="上限" />
+                                Text="{Binding Config.Items[7].UpperLimit, Mode=OneWay}" />
                         </StackPanel>
 
                         <!--  下拉型（2 输入：测试方式下拉，只读；有源→无源顺序）  -->
@@ -534,10 +588,10 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[16].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[16].MesCode, Mode=OneWay}" />
                             <ComboBox
                                 Width="150"
                                 DisplayMemberPath="Display"
@@ -561,10 +615,10 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[15].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[15].MesCode, Mode=OneWay}" />
                             <ComboBox
                                 Width="150"
                                 DisplayMemberPath="Display"
@@ -590,10 +644,10 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[17].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[17].MesCode, Mode=OneWay}" />
                             <TextBox
                                 Width="140"
                                 IsReadOnly="True"
@@ -615,10 +669,10 @@
                             <TextBox
                                 Width="110"
                                 Margin="0,0,4,0"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[18].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[18].MesCode, Mode=OneWay}" />
                             <TextBox
                                 Width="140"
                                 IsReadOnly="True"
@@ -641,10 +695,10 @@
                                 IsHitTestVisible="False" />
                             <TextBox
                                 Width="110"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[8].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[8].MesCode, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -660,10 +714,10 @@
                                 IsHitTestVisible="False" />
                             <TextBox
                                 Width="110"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[9].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[9].MesCode, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -679,10 +733,10 @@
                                 IsHitTestVisible="False" />
                             <TextBox
                                 Width="110"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[10].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[10].MesCode, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -698,10 +752,10 @@
                                 IsHitTestVisible="False" />
                             <TextBox
                                 Width="110"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[11].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[11].MesCode, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -717,10 +771,10 @@
                                 IsHitTestVisible="False" />
                             <TextBox
                                 Width="110"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[12].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[12].MesCode, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -736,10 +790,10 @@
                                 IsHitTestVisible="False" />
                             <TextBox
                                 Width="110"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[13].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[13].MesCode, Mode=OneWay}" />
                         </StackPanel>
                         <StackPanel
                             Width="420"
@@ -755,10 +809,10 @@
                                 IsHitTestVisible="False" />
                             <TextBox
                                 Width="110"
+                                materialDesign:HintAssist.Hint="MES代码"
                                 IsReadOnly="True"
                                 Style="{StaticResource MaterialDesignFloatingHintTextBox}"
-                                Text="{Binding Config.Items[14].MesCode, Mode=OneWay}"
-                                materialDesign:HintAssist.Hint="MES代码" />
+                                Text="{Binding Config.Items[14].MesCode, Mode=OneWay}" />
                         </StackPanel>
 
                         <!--  全局项（无勾选框、无 MES 框，只读），固定排在配置项最后方，与配置界面一致  -->
@@ -815,31 +869,37 @@
                                     <ColumnDefinition Width="95" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <!--  序号列表头（第 1 列，与下方各行序号格对齐）  -->
+                                <!--
+                                    序号+检测项目合并表头（跨第 1、2 列单一 Border）：
+                                    内部嵌套 45+95 双列 Grid（与外层列定义一致），
+                                    序号、检测项目各自在子列内居中，保证与下方各行内容上下对齐
+                                -->
                                 <Border
-                                    Grid.Column="0"
-                                    Margin="0,0,2,2"
+                                    Grid.ColumnSpan="2"
+                                    Margin="0,0,6,2"
                                     Padding="4"
                                     Background="#3F51B5">
-                                    <TextBlock
-                                        VerticalAlignment="Center"
-                                        FontWeight="Bold"
-                                        Foreground="White"
-                                        Text="序号"
-                                        TextAlignment="Center" />
-                                </Border>
-                                <!--  检测项目列表头（第 2 列，与下方各行项目名格对齐）  -->
-                                <Border
-                                    Grid.Column="1"
-                                    Margin="0,0,2,2"
-                                    Padding="4"
-                                    Background="#3F51B5">
-                                    <TextBlock
-                                        VerticalAlignment="Center"
-                                        FontWeight="Bold"
-                                        Foreground="White"
-                                        Text="检测项目"
-                                        TextAlignment="Center" />
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="45" />
+                                            <ColumnDefinition Width="95" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            FontWeight="Bold"
+                                            Foreground="White"
+                                            Text="序号"
+                                            TextAlignment="Center" />
+                                        <TextBlock
+                                            Grid.Column="1"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            FontWeight="Bold"
+                                            Foreground="White"
+                                            Text="检测项目"
+                                            TextAlignment="Center" />
+                                    </Grid>
                                 </Border>
                                 <!--  工位列表头（UniformGrid 均分，与下方各行工位列对齐）  -->
                                 <ItemsControl Grid.Column="2" ItemsSource="{Binding Stations}">
@@ -851,7 +911,7 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Border
-                                                Margin="2,0,0,2"
+                                                Margin="6,0,0,2"
                                                 Padding="4"
                                                 Background="#3F51B5">
                                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -878,30 +938,34 @@
                                                 <ColumnDefinition Width="95" />
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
+                                            <!--
+                                                序号+项目名合并单元格（跨第 1、2 列单一 Border）：
+                                                内部嵌套 45+95 双列 Grid（与表头一致），
+                                                序号、项目名各自在子列内居中，所有行与表头上下对齐
+                                            -->
                                             <Border
-                                                Grid.Column="0"
-                                                Margin="0,0,2,2"
+                                                Grid.ColumnSpan="2"
+                                                Margin="0,0,6,2"
                                                 Padding="4"
                                                 Background="#F5F5F5"
                                                 BorderBrush="#DDDDDD"
                                                 BorderThickness="0,0,2,2">
-                                                <TextBlock
-                                                    VerticalAlignment="Center"
-                                                    Text="{Binding Index}"
-                                                    TextAlignment="Center" />
-                                            </Border>
-                                            <Border
-                                                Grid.Column="1"
-                                                Margin="0,0,2,2"
-                                                Padding="4"
-                                                Background="#F5F5F5"
-                                                BorderBrush="#DDDDDD"
-                                                BorderThickness="0,0,2,2">
-                                                <TextBlock
-                                                    VerticalAlignment="Center"
-                                                    Text="{Binding Name}"
-                                                    TextAlignment="Center"
-                                                    TextWrapping="Wrap" />
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="45" />
+                                                        <ColumnDefinition Width="95" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock
+                                                        VerticalAlignment="Center"
+                                                        Text="{Binding Index}"
+                                                        TextAlignment="Center" />
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        VerticalAlignment="Center"
+                                                        Text="{Binding Name}"
+                                                        TextAlignment="Center"
+                                                        TextWrapping="Wrap" />
+                                                </Grid>
                                             </Border>
                                             <ItemsControl Grid.Column="2" ItemsSource="{Binding Cells}">
                                                 <ItemsControl.ItemsPanel>
@@ -913,7 +977,7 @@
                                                     <DataTemplate>
                                                         <Border
                                                             MinHeight="34"
-                                                            Margin="2,0,0,2"
+                                                            Margin="6,0,0,2"
                                                             Padding="4"
                                                             CornerRadius="2">
                                                             <Border.Style>
@@ -936,9 +1000,21 @@
                                                             </Border.Style>
                                                             <Grid>
                                                                 <Grid.Resources>
-                                                                    <!--  配色单元格内文本：有底色时白字（条码行/中性行黑字）  -->
-                                                                    <Style x:Key="CellTextStyle" TargetType="TextBlock">
+                                                                    <!--
+                                                                        自动行结果只读文本框：操作者可选中复制实测值，但不可修改；
+                                                                        无边框透明背景融入单元格底色，视觉与原 TextBlock 一致；
+                                                                        光标画刷透明（隐藏闪烁竖线），前景色随 ColorMode 切换白/黑字
+                                                                    -->
+                                                                    <Style
+                                                                        x:Key="CellTextBoxStyle"
+                                                                        BasedOn="{StaticResource {x:Type TextBox}}"
+                                                                        TargetType="TextBox">
                                                                         <Setter Property="Foreground" Value="#212121" />
+                                                                        <Setter Property="Background" Value="Transparent" />
+                                                                        <Setter Property="BorderThickness" Value="0" />
+                                                                        <Setter Property="IsReadOnly" Value="True" />
+                                                                        <Setter Property="CaretBrush" Value="Transparent" />
+                                                                        <Setter Property="Focusable" Value="True" />
                                                                         <Style.Triggers>
                                                                             <DataTrigger Binding="{Binding ColorMode}" Value="green">
                                                                                 <Setter Property="Foreground" Value="White" />
@@ -969,16 +1045,24 @@
                                                                             CommandParameter="{Binding Station}" />
                                                                     </TextBox.InputBindings>
                                                                 </TextBox>
-                                                                <!--  串口行：串口选择下拉（单工位共用一个串口，全部绑定 VM 同一
-                                                                      SelectedPort/Ports；下拉展开时刷新可用串口列表）  -->
+                                                                <!--
+                                                                    串口行：串口选择下拉（单工位共用一个串口，全部绑定 VM 同一
+                                                                    SelectedPort/Ports；下拉展开时经标准 Interaction 触发器
+                                                                    调用 VM RefreshPortsCommand 刷新可用串口列表）
+                                                                -->
                                                                 <ComboBox
                                                                     MinWidth="90"
                                                                     VerticalAlignment="Center"
                                                                     HorizontalContentAlignment="Center"
-                                                                    behaviors:DropDownOpened.Command="{Binding DataContext.RefreshPortsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     ItemsSource="{Binding DataContext.Ports, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     SelectedItem="{Binding DataContext.SelectedPort, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                                    Visibility="{Binding DataContext.Kind, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource RowKindToPortVisibilityConverter}}" />
+                                                                    Visibility="{Binding DataContext.Kind, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource RowKindToPortVisibilityConverter}}">
+                                                                    <i:Interaction.Triggers>
+                                                                        <i:EventTrigger EventName="DropDownOpened">
+                                                                            <prism:InvokeCommandAction Command="{Binding DataContext.RefreshPortsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                                                                        </i:EventTrigger>
+                                                                    </i:Interaction.Triggers>
+                                                                </ComboBox>
                                                                 <!--  人工行：正常/异常下拉（默认正常，选异常红底）  -->
                                                                 <ComboBox
                                                                     MinWidth="90"
@@ -987,23 +1071,25 @@
                                                                     ItemsSource="{x:Static models:LaserDetectorStationState.ManualOptions}"
                                                                     SelectedItem="{Binding ManualResult, Mode=TwoWay}"
                                                                     Visibility="{Binding DataContext.Kind, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource RowKindToManualVisibilityConverter}}" />
-                                                                <!--  自动行：实测值文本（红绿底白字，中性底黑字）  -->
-                                                                <TextBlock
+                                                                <!--
+                                                                    自动行：实测值只读文本框（红绿底白字，中性底黑字；
+                                                                    操作者可选中复制，不可修改）
+                                                                -->
+                                                                <TextBox
                                                                     VerticalAlignment="Center"
-                                                                    Style="{StaticResource CellTextStyle}"
+                                                                    Style="{StaticResource CellTextBoxStyle}"
                                                                     Text="{Binding Value}"
                                                                     TextAlignment="Center"
-                                                                    TextTrimming="CharacterEllipsis"
                                                                     Visibility="{Binding DataContext.Kind, RelativeSource={RelativeSource AncestorType=ItemsControl}, Converter={StaticResource RowKindToAutoVisibilityConverter}}" />
                                                             </Grid>
                                                         </Border>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                                            </ItemsControl>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
 
                         </StackPanel>
                     </ScrollViewer>

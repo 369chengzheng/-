@@ -281,7 +281,7 @@ namespace IMDP.Products.GasDG.LaserDetector.Protocol
         {
             if (IsAllZero(data, offset, 6))
             {
-                compilationTimeDisplay = "0000-00-00 00:00:00";
+                compilationTimeDisplay = "000000000000";
                 isValid = false;
                 return null;
             }
@@ -295,7 +295,7 @@ namespace IMDP.Products.GasDG.LaserDetector.Protocol
                     data[offset + 2],
                     data[offset + 1],
                     data[offset]);
-                compilationTimeDisplay = compilationTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+                compilationTimeDisplay = compilationTime.ToString("yyMMddHHmmss", CultureInfo.InvariantCulture);
                 isValid = true;
                 return compilationTime;
             }

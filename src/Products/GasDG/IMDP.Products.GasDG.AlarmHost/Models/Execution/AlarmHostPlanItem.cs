@@ -38,8 +38,10 @@ public sealed class AlarmHostPlanItem
     public static AlarmHostPlanItem FromParameter(TestParameterDto item)
     {
         var definition = AlarmHostFunctionCatalog.Get(item.Code);
-        var parameters = item.Parameters.OrderBy(parameter => parameter.Order).Select(parameter =>
-            AlarmHostPlanParameter.FromParameter(parameter, definition.GetParameter(parameter.Code))).ToArray();
+        var parameters = definition.ShowParameters
+            ? item.Parameters.OrderBy(parameter => parameter.Order).Select(parameter =>
+                AlarmHostPlanParameter.FromParameter(parameter, definition.GetParameter(parameter.Code))).ToArray()
+            : Array.Empty<AlarmHostPlanParameter>();
         return new AlarmHostPlanItem
         {
             Code = item.Code,

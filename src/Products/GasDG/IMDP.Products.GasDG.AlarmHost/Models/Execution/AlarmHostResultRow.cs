@@ -55,7 +55,7 @@ public sealed class AlarmHostResultRow
     /// <summary>
     /// 当前功能及参数形态是否已有设备执行实现，新增展示项不冒充可执行项目
     /// </summary>
-    public bool CanExecute => AlarmHostFunctionCatalog.CanExecute(Code, Parameters);
+    public bool CanExecute => AlarmHostFunctionCatalog.CanExecute(Code);
 
     /// <summary>
     /// 按连续工位号排列的独立结果格，未接入项目显示中性提示
